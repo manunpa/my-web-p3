@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client'
-import LoginV7 from './LoginV7'
+import App from './App'
 import './style.css'
 
-createRoot(document.getElementById('root')).render(<LoginV7 />)
+createRoot(document.getElementById('root')).render(<App />)
