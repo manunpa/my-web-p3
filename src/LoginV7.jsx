@@ -1,14 +1,20 @@
 import { useState } from 'react'
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, User } from 'lucide-react'
 import {
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   sendPasswordResetEmail,
+  signInWithPopup,
+  GoogleAuthProvider,
+  OAuthProvider,
   setPersistence,
   browserLocalPersistence,
   browserSessionPersistence,
 } from 'firebase/auth'
 import { auth } from './firebase'
 import { useTilt, ripple } from './useTilt'
+import { saveUser } from './saveUser'
 
 const explain = (code) => {
   switch (code) {
@@ -18,41 +24,111 @@ const explain = (code) => {
       return 'Incorrect email or password.'
     case 'auth/invalid-email':
       return 'Enter a valid email address.'
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists. Sign in instead.'
+    case 'auth/weak-password':
+      return 'Password must be at least 6 characters.'
     case 'auth/too-many-requests':
       return 'Too many attempts. Wait a few minutes and try again.'
     case 'auth/user-disabled':
       return 'This account has been disabled.'
     case 'auth/network-request-failed':
       return 'Network error. Check your connection and try again.'
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return 'Sign-in window was closed before finishing.'
+    case 'auth/popup-blocked':
+      return 'Your browser blocked the sign-in window. Allow pop-ups and try again.'
+    case 'auth/account-exists-with-different-credential':
+      return 'This email is already registered with another sign-in method.'
+    case 'auth/operation-not-allowed':
+      return 'This sign-in method is not enabled yet.'
+    case 'auth/unauthorized-domain':
+      return 'This website is not authorised for sign-in yet.'
     default:
       return 'Something went wrong. Try again.'
   }
 }
 
-// After a successful sign-in, App.jsx sees the new user and switches to the home page.
-export default function LoginV7() {
+const providers = {
+  google: () => new GoogleAuthProvider(),
+  apple: () => {
+    const p = new OAuthProvider('apple.com')
+    p.addScope('email')
+    p.addScope('name')
+    return p
+  },
+}
+
+// After a successful sign-in or sign-up, App.jsx sees the new user and switches to the home page.
+// `onProfileUpdated` lets App re-render once the new account's display name is saved.
+export default function LoginV7({ onProfileUpdated }) {
+  const [mode, setMode] = useState('in') // 'in' = sign in, 'up' = sign up
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
   const [show, setShow] = useState(false)
   const [remember, setRemember] = useState(true)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(null) // null | 'form' | 'google' | 'apple'
   const [msg, setMsg] = useState(null)
   const { stage, card } = useTilt()
+  const signingUp = mode === 'up'
+
+  const fail = (err) => {
+    setMsg({ type: 'err', text: explain(err.code) })
+    setLoading(null)
+  }
+
+  const switchMode = (e) => {
+    e.preventDefault()
+    setMode(signingUp ? 'in' : 'up')
+    setMsg(null)
+    setPassword('')
+    setConfirm('')
+  }
 
   const submit = async (e) => {
     e.preventDefault()
-    if (!email || !password) {
-      setMsg({ type: 'err', text: 'Enter your email and password.' })
+    if (!email || !password || (signingUp && (!name.trim() || !confirm))) {
+      setMsg({ type: 'err', text: 'Fill in every field.' })
       return
     }
-    setLoading(true)
+    if (signingUp && password.length < 6) {
+      setMsg({ type: 'err', text: explain('auth/weak-password') })
+      return
+    }
+    if (signingUp && password !== confirm) {
+      setMsg({ type: 'err', text: 'Passwords do not match.' })
+      return
+    }
+    setLoading('form')
     setMsg(null)
     try {
       await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence)
-      await signInWithEmailAndPassword(auth, email.trim(), password)
+      if (signingUp) {
+        const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password)
+        await updateProfile(user, { displayName: name.trim() })
+        await saveUser(user) // the first save ran before the name was set; add it now
+        onProfileUpdated?.()
+      } else {
+        await signInWithEmailAndPassword(auth, email.trim(), password)
+      }
     } catch (err) {
-      setMsg({ type: 'err', text: explain(err.code) })
-      setLoading(false)
+      fail(err)
+    }
+  }
+
+  // Works for both sign in and sign up: a first-time Google/Apple user gets a new account automatically.
+  const social = async (e, id) => {
+    ripple(e)
+    setLoading(id)
+    setMsg(null)
+    try {
+      await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence)
+      await signInWithPopup(auth, providers[id]())
+    } catch (err) {
+      fail(err)
     }
   }
 
@@ -73,8 +149,28 @@ export default function LoginV7() {
   return (
     <div className="stage" ref={stage}>
       <form className="card in" ref={card} onSubmit={submit} noValidate>
-        <h1>Welcome <b>Back</b></h1>
-        <p className="sub">Enter your credentials to access your secure account.</p>
+        {signingUp ? (
+          <>
+            <h1>Create <b>Account</b></h1>
+            <p className="sub">Sign up to get access to your secure account.</p>
+          </>
+        ) : (
+          <>
+            <h1>Welcome <b>Back</b></h1>
+            <p className="sub">Enter your credentials to access your secure account.</p>
+          </>
+        )}
+
+        {signingUp && (
+          <>
+            <label htmlFor="n">Name</label>
+            <div className="f">
+              <User size={16} />
+              <input id="n" type="text" placeholder="Your name" autoComplete="name"
+                value={name} onChange={(e) => setName(e.target.value)} required />
+            </div>
+          </>
+        )}
 
         <label htmlFor="e">Email address</label>
         <div className="f">
@@ -86,23 +182,38 @@ export default function LoginV7() {
         <label htmlFor="p">Password</label>
         <div className="f">
           <Lock size={16} />
-          <input id="p" type={show ? 'text' : 'password'} placeholder="••••••••••" autoComplete="current-password"
+          <input id="p" type={show ? 'text' : 'password'}
+            placeholder={signingUp ? 'At least 6 characters' : '••••••••••'}
+            autoComplete={signingUp ? 'new-password' : 'current-password'}
             value={password} onChange={(e) => setPassword(e.target.value)} required />
           <button type="button" aria-label="Show or hide password" onClick={() => setShow(!show)}>
             {show ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
         </div>
 
+        {signingUp && (
+          <>
+            <label htmlFor="c">Confirm password</label>
+            <div className="f">
+              <Lock size={16} />
+              <input id="c" type={show ? 'text' : 'password'} placeholder="Type it again" autoComplete="new-password"
+                value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+            </div>
+          </>
+        )}
+
         <div className="row">
           <label>
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
             Remember me
           </label>
-          <a href="#forgot" onClick={forgot}>Forgot password?</a>
+          {!signingUp && <a href="#forgot" onClick={forgot}>Forgot password?</a>}
         </div>
 
-        <button className="go" disabled={loading} onClick={ripple}>
-          {loading ? 'Signing in…' : 'Sign in'}
+        <button className="go" disabled={!!loading} onClick={ripple}>
+          {loading === 'form'
+            ? (signingUp ? 'Creating account…' : 'Signing in…')
+            : (signingUp ? 'Create account' : 'Sign in')}
         </button>
 
         {msg && (
@@ -113,11 +224,20 @@ export default function LoginV7() {
 
         <div className="or">or continue with</div>
         <div className="soc">
-          <button type="button">Google</button>
-          <button type="button">Apple</button>
+          <button type="button" disabled={!!loading} onClick={(e) => social(e, 'google')}>
+            {loading === 'google' ? 'Opening…' : 'Google'}
+          </button>
+          <button type="button" disabled={!!loading} onClick={(e) => social(e, 'apple')}>
+            {loading === 'apple' ? 'Opening…' : 'Apple'}
+          </button>
         </div>
 
-        <p className="foot">Don’t have an account? <a href="#signup">Sign up</a></p>
+        <p className="foot">
+          {signingUp ? 'Already have an account? ' : 'Don’t have an account? '}
+          <a href={signingUp ? '#signin' : '#signup'} onClick={switchMode}>
+            {signingUp ? 'Sign in' : 'Sign up'}
+          </a>
+        </p>
       </form>
     </div>
   )
