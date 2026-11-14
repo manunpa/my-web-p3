@@ -7,7 +7,6 @@ import {
   sendPasswordResetEmail,
   signInWithPopup,
   GoogleAuthProvider,
-  OAuthProvider,
   setPersistence,
   browserLocalPersistence,
   browserSessionPersistence,
@@ -50,19 +49,9 @@ const explain = (code) => {
   }
 }
 
-const providers = {
-  google: () => new GoogleAuthProvider(),
-  apple: () => {
-    const p = new OAuthProvider('apple.com')
-    p.addScope('email')
-    p.addScope('name')
-    return p
-  },
-}
-
 // After a successful sign-in or sign-up, App.jsx sees the new user and switches to the home page.
 // `onProfileUpdated` lets App re-render once the new account's display name is saved.
-export default function LoginV7({ onProfileUpdated }) {
+export default function LoginV7({ notice, onProfileUpdated }) {
   const [mode, setMode] = useState('in') // 'in' = sign in, 'up' = sign up
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -70,8 +59,8 @@ export default function LoginV7({ onProfileUpdated }) {
   const [confirm, setConfirm] = useState('')
   const [show, setShow] = useState(false)
   const [remember, setRemember] = useState(true)
-  const [loading, setLoading] = useState(null) // null | 'form' | 'google' | 'apple'
-  const [msg, setMsg] = useState(null)
+  const [loading, setLoading] = useState(null) // null | 'form' | 'google'
+  const [msg, setMsg] = useState(notice ? { type: 'err', text: notice } : null)
   const { stage, card } = useTilt()
   const signingUp = mode === 'up'
 
@@ -81,7 +70,7 @@ export default function LoginV7({ onProfileUpdated }) {
   }
 
   const switchMode = (e) => {
-    e.preventDefault()
+    ripple(e)
     setMode(signingUp ? 'in' : 'up')
     setMsg(null)
     setPassword('')
@@ -119,14 +108,14 @@ export default function LoginV7({ onProfileUpdated }) {
     }
   }
 
-  // Works for both sign in and sign up: a first-time Google/Apple user gets a new account automatically.
-  const social = async (e, id) => {
+  // Works for both sign in and sign up: a first-time Google user gets a new account automatically.
+  const google = async (e) => {
     ripple(e)
-    setLoading(id)
+    setLoading('google')
     setMsg(null)
     try {
       await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence)
-      await signInWithPopup(auth, providers[id]())
+      await signInWithPopup(auth, new GoogleAuthProvider())
     } catch (err) {
       fail(err)
     }
@@ -224,20 +213,13 @@ export default function LoginV7({ onProfileUpdated }) {
 
         <div className="or">or continue with</div>
         <div className="soc">
-          <button type="button" disabled={!!loading} onClick={(e) => social(e, 'google')}>
+          <button type="button" disabled={!!loading} onClick={google}>
             {loading === 'google' ? 'Opening…' : 'Google'}
           </button>
-          <button type="button" disabled={!!loading} onClick={(e) => social(e, 'apple')}>
-            {loading === 'apple' ? 'Opening…' : 'Apple'}
+          <button type="button" disabled={!!loading} onClick={switchMode}>
+            {signingUp ? 'Sign in' : 'Sign up'}
           </button>
         </div>
-
-        <p className="foot">
-          {signingUp ? 'Already have an account? ' : 'Don’t have an account? '}
-          <a href={signingUp ? '#signin' : '#signup'} onClick={switchMode}>
-            {signingUp ? 'Sign in' : 'Sign up'}
-          </a>
-        </p>
       </form>
     </div>
   )

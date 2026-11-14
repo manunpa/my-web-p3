@@ -1,14 +1,22 @@
 rules_version = '2';
 
 // Paste into Firebase Console -> Firestore Database -> Rules, then Publish.
-// Each user may only read and write their own users/{uid} document.
+// Each user may only read and write their own users/{uid} document,
+// and only within 30 minutes of signing in (same as the website's session timer).
 // You (the owner) still see every user in the Firebase Console.
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
 
-      allow create, update: if request.auth != null
+    // Signed in, and the sign-in happened less than 30 minutes ago.
+    function activeSession() {
+      return request.auth != null
+        && request.time < timestamp.value(request.auth.token.auth_time * 1000) + duration.value(30, 'm');
+    }
+
+    match /users/{uid} {
+      allow read: if activeSession() && request.auth.uid == uid;
+
+      allow create, update: if activeSession()
         && request.auth.uid == uid
         && request.resource.data.uid == uid
         && request.resource.data.keys().hasOnly(
