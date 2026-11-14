@@ -9,7 +9,7 @@ import { useTilt, ripple } from './useTilt'
 // Edit this list to add, remove or rename buttons.
 // `href` is where the button goes; '#' means the page is not built yet.
 const LINKS = [
-  { label: 'Dashboard', hint: 'Overview at a glance', icon: LayoutDashboard, href: '#' },
+  { label: 'Dashboard', hint: 'Overview at a glance', icon: LayoutDashboard, href: '#/dashboard' },
   { label: 'Profile', hint: 'Your account details', icon: User, href: '#' },
   { label: 'Documents', hint: 'Files and records', icon: FileText, href: '#' },
   { label: 'Reports', hint: 'Charts and summaries', icon: BarChart3, href: '#' },

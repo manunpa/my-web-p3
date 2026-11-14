@@ -3,6 +3,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from './firebase'
 import LoginV7 from './LoginV7'
 import Home from './Home'
+import Dashboard from './Dashboard'
 import SessionTimer from './SessionTimer'
 import { saveUser } from './saveUser'
 
@@ -14,6 +15,7 @@ const SESSION_MS = 30 * 60 * 1000
 // and link to them with href="#/profile". Every page in this list requires sign-in.
 const ROUTES = {
   '/': Home,
+  '/dashboard': Dashboard,
 }
 
 const currentRoute = () => location.hash.replace(/^#/, '') || '/'
