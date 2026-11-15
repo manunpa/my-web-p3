@@ -34,7 +34,33 @@ const pick = (row, ...names) => {
   return ''
 }
 
+/* ---------- cache: the Apps Script takes 5-7 s, so show the last result straight away ---------- */
+
+const CACHE_KEY = 'geofences.v1'
+let memory = null
+
+// Last loaded data (from this visit, or saved in the browser), or null.
+export function cachedGeofences() {
+  if (memory) return memory
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (raw) memory = JSON.parse(raw)
+  } catch { /* storage blocked or corrupt */ }
+  return memory
+}
+
+function remember(data) {
+  memory = data
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)) } catch { /* quota / private mode */ }
+}
+
 export async function loadGeofences() {
+  const data = await fetchGeofences()
+  remember({ ...data, at: Date.now() })
+  return memory
+}
+
+async function fetchGeofences() {
   const res = await fetch(GEOFENCE_API_URL, { cache: 'no-store' })
   if (!res.ok) throw new Error(`โหลดข้อมูลพิกัดไม่สำเร็จ (HTTP ${res.status})`)
   const json = await res.json()

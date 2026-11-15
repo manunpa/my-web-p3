@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Search, RefreshCw, MapPin, Layers, Crosshair, X, Copy, Check, ExternalLink, AlertTriangle,
 } from 'lucide-react'
-import { loadGeofences, googleMapsLink, OTHER_SUPPLIER_COLOR } from './mapsData'
+import { loadGeofences, cachedGeofences, googleMapsLink, OTHER_SUPPLIER_COLOR } from './mapsData'
 import LeafletMap from './LeafletMap'
-import GoogleMap from './GoogleMap'
+import GoogleMap, { preloadGoogleMaps } from './GoogleMap'
 
 const ENGINES = [
   { id: 'osm', label: 'OpenStreetMap' },
@@ -41,7 +41,11 @@ const distKm = (a, b) => {
 }
 
 export default function MapsPage() {
-  const [data, setData] = useState({ status: 'loading', points: [], invalid: [], suppliers: [], error: null })
+  // Show the last saved data immediately (the Apps Script takes several seconds), then refresh.
+  const [data, setData] = useState(() => {
+    const c = cachedGeofences()
+    return c ? { status: 'ready', ...c, error: null } : { status: 'loading', points: [], invalid: [], suppliers: [], error: null }
+  })
   const [busy, setBusy] = useState(false)
   const [engine, setEngine] = useState(() => store.get('maps.engine', 'osm'))
   const [type, setType] = useState(() => store.get('maps.type', 'dark'))
@@ -52,7 +56,9 @@ export default function MapsPage() {
   const [center, setCenter] = useState(null)
   const [selected, setSelected] = useState(null)
   const [limit, setLimit] = useState(PAGE)
-  const [fitKey, setFitKey] = useState(0)
+  const [fitKey, setFitKey] = useState(() => (cachedGeofences() ? 1 : 0))
+  const fitted = useRef(!!cachedGeofences())
+  const [opened, setOpened] = useState(() => new Set([store.get('maps.engine', 'osm')]))
   const [copied, setCopied] = useState(false)
   const view = useRef({ lat: 13.6, lng: 100.9, zoom: 6 })
 
@@ -61,7 +67,7 @@ export default function MapsPage() {
     try {
       const d = await loadGeofences()
       setData({ status: 'ready', ...d, error: null })
-      setFitKey((k) => (k ? k : 1)) // zoom to all points on the first load only
+      if (!fitted.current) { fitted.current = true; setFitKey(1) } // zoom to all points on the first load only
     } catch (e) {
       setData((s) => ({ ...s, status: s.points.length ? 'ready' : 'error', error: e.message }))
     } finally {
@@ -70,10 +76,18 @@ export default function MapsPage() {
   }, [])
   useEffect(() => { load() }, [load])
 
+  // Fetch the Google Maps script in the background so switching to it is quick.
+  // (Loading the script is free; only creating a map counts as a map load.)
+  useEffect(() => {
+    const t = setTimeout(() => preloadGoogleMaps().catch(() => {}), 1500)
+    return () => clearTimeout(t)
+  }, [])
+
   useEffect(() => { store.set('maps.engine', engine); store.set('maps.type', type) }, [engine, type])
 
   const switchEngine = (id) => {
     setEngine(id)
+    setOpened((o) => (o.has(id) ? o : new Set(o).add(id)))
     if (!TYPES[id].some((t) => t.id === type)) setType('satellite')
     setFitKey(0) // keep the current view when switching
   }
@@ -114,8 +128,6 @@ export default function MapsPage() {
     } catch { /* clipboard blocked */ }
   }
 
-  const MapView = engine === 'google' ? GoogleMap : LeafletMap
-
   return (
     <div className="stage maps-stage">
       <header className="maps-head">
@@ -126,12 +138,14 @@ export default function MapsPage() {
             {data.status === 'ready'
               ? `${nf.format(data.points.length)} จุดบนแผนที่ · ${data.suppliers.length} ผู้ให้บริการ`
               : 'ข้อมูลพิกัดจาก Google Sheet'}
+            {data.at && ` · อัปเดต ${new Date(data.at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`}
           </p>
         </div>
         <div className="map-modes">
           <div className="seg-ctl" role="radiogroup" aria-label="ผู้ให้บริการแผนที่">
             {ENGINES.map((e) => (
               <button key={e.id} type="button" role="radio" aria-checked={engine === e.id}
+                onPointerEnter={e.id === 'google' ? () => preloadGoogleMaps().catch(() => {}) : undefined}
                 className={engine === e.id ? 'on' : ''} onClick={() => switchEngine(e.id)}>{e.label}</button>
             ))}
           </div>
@@ -244,8 +258,17 @@ export default function MapsPage() {
               <button type="button" className="more" onClick={load}>ลองใหม่</button>
             </div>
           ) : (
-            <MapView key={engine} points={shown} colorOf={colorOf} selected={selected} onSelect={setSelected}
-              type={type} view={view.current} onView={onView} fitKey={fitKey} />
+            <>
+              {/* Both maps stay alive once opened, so switching back and forth is instant. */}
+              {opened.has('osm') && (
+                <LeafletMap active={engine === 'osm'} points={shown} colorOf={colorOf} selected={selected}
+                  onSelect={setSelected} type={type} view={view.current} onView={onView} fitKey={fitKey} />
+              )}
+              {opened.has('google') && (
+                <GoogleMap active={engine === 'google'} points={shown} colorOf={colorOf} selected={selected}
+                  onSelect={setSelected} type={type} view={view.current} onView={onView} fitKey={fitKey} />
+              )}
+            </>
           )}
           {data.status === 'loading' && <div className="map-msg"><MapPin size={18} /> กำลังโหลดพิกัด…</div>}
           {data.error && data.status === 'ready' && <div className="map-toast">โหลดข้อมูลล่าสุดไม่สำเร็จ แสดงข้อมูลชุดก่อนหน้า</div>}

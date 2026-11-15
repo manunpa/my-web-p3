@@ -296,3 +296,12 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold)}
 .hl-marker::before{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid #facc15;animation:ping 1.6s cubic-bezier(0,0,.2,1) infinite}
 @keyframes ping{75%,100%{transform:scale(2.2);opacity:0}}
 @media (max-width:900px){.maps-body{align-content:start}}
+.map-canvas[hidden]{display:none!important}
+/* page error card */
+.error-card{display:flex;flex-direction:column;gap:10px;max-width:480px}
+.error-card .sub{margin:0}
+.err-ic{display:grid;place-items:center;width:44px;height:44px;border-radius:12px;background:rgba(252,165,165,.12);color:#fca5a5}
+.err-msg{display:block;padding:10px 12px;border-radius:10px;background:var(--field);border:1px solid var(--line);color:var(--muted);font-size:11px;white-space:pre-wrap;word-break:break-word}
+.err-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+.err-actions .go{flex:1 1 180px;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.err-actions .more{display:inline-flex;align-items:center;gap:6px;height:46px;padding:0 18px}

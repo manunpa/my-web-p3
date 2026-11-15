@@ -33,15 +33,15 @@ const clusterIcon = (cluster) => {
 
 // points: visible points. colorOf(supplier). selected: point or null. onSelect(point).
 // view: { lat, lng, zoom } to start from. onView(view, bounds) on every move.
-export default function LeafletMap({ points, colorOf, selected, onSelect, type, view, onView, fitKey }) {
+export default function LeafletMap({ points, colorOf, selected, onSelect, type, view, onView, fitKey, active }) {
   const box = useRef(null)
   const map = useRef(null)
   const tiles = useRef(null)
   const cluster = useRef(null)
-  const markers = useRef(new Map())
+  const markers = useRef(new WeakMap()) // point object -> marker
   const highlight = useRef(null)
-  const cb = useRef({ onSelect, onView })
-  cb.current = { onSelect, onView }
+  const cb = useRef({ onSelect, onView, active })
+  cb.current = { onSelect, onView, active }
 
   // create the map once
   useEffect(() => {
@@ -55,6 +55,7 @@ export default function LeafletMap({ points, colorOf, selected, onSelect, type, 
       spiderfyOnMaxZoom: true, iconCreateFunction: clusterIcon,
     }).addTo(m)
     const report = () => {
+      if (!cb.current.active) return // a hidden map must not overwrite the shared view
       const c = m.getCenter(), b = m.getBounds()
       cb.current.onView({ lat: c.lat, lng: c.lng, zoom: m.getZoom() },
         { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() })
@@ -64,7 +65,7 @@ export default function LeafletMap({ points, colorOf, selected, onSelect, type, 
     report()
     const ro = new ResizeObserver(() => m.invalidateSize())
     ro.observe(box.current)
-    return () => { ro.disconnect(); m.remove(); map.current = null; markers.current.clear() }
+    return () => { ro.disconnect(); m.remove(); map.current = null; markers.current = new WeakMap() }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // base layer
@@ -78,13 +79,13 @@ export default function LeafletMap({ points, colorOf, selected, onSelect, type, 
   // markers (created once per point, re-used when filters change)
   useEffect(() => {
     const layers = points.map((p) => {
-      let mk = markers.current.get(p.id)
+      let mk = markers.current.get(p)
       if (!mk) {
         mk = L.circleMarker([p.lat, p.lng], {
           radius: 6, weight: 1.5, color: '#fff', fillColor: colorOf(p.supplier), fillOpacity: 1,
         })
         mk.on('click', () => cb.current.onSelect(p))
-        markers.current.set(p.id, mk)
+        markers.current.set(p, mk)
       }
       return mk
     })
@@ -92,9 +93,17 @@ export default function LeafletMap({ points, colorOf, selected, onSelect, type, 
     cluster.current.addLayers(layers)
   }, [points, colorOf])
 
+  // when this map becomes the visible one, jump to the shared view
+  useEffect(() => {
+    if (!active) return
+    const m = map.current
+    m.invalidateSize()
+    m.setView([view.lat, view.lng], Math.round(view.zoom), { animate: false })
+  }, [active]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // zoom to all points when asked (first load)
   useEffect(() => {
-    if (!fitKey || !points.length) return
+    if (!fitKey || !active || !points.length) return
     map.current.fitBounds(L.latLngBounds(points.map((p) => [p.lat, p.lng])), { padding: [30, 30] })
   }, [fitKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -114,10 +123,11 @@ export default function LeafletMap({ points, colorOf, selected, onSelect, type, 
       }),
     }).addTo(m)
     highlight.current.bindPopup(popupHtml(selected, colorOf(selected.supplier)), { className: 'dark-popup', offset: [0, -10] })
+    if (!cb.current.active) return
     m.flyTo(ll, Math.max(m.getZoom(), 16), { duration: 0.9 })
     const t = setTimeout(() => highlight.current?.openPopup(), 950)
     return () => clearTimeout(t)
   }, [selected, colorOf])
 
-  return <div className="map-canvas" ref={box} />
+  return <div className="map-canvas" ref={box} hidden={!active} />
 }

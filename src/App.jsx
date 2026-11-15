@@ -5,6 +5,7 @@ import LoginV7 from './LoginV7'
 import Home from './Home'
 import Dashboard from './Dashboard'
 import SessionTimer from './SessionTimer'
+import PageErrorBoundary from './PageErrorBoundary'
 import { saveUser } from './saveUser'
 
 // The map page pulls in the map libraries, so it is only downloaded when opened.
@@ -96,9 +97,11 @@ export default function App() {
         deadline={deadline}
         onExpire={() => end('Your session expired after 30 minutes. Please sign in again.')}
       />
-      <Suspense fallback={<div className="stage" />}>
-        <Page user={user} />
-      </Suspense>
+      <PageErrorBoundary key={route}>
+        <Suspense fallback={<div className="stage" />}>
+          <Page user={user} />
+        </Suspense>
+      </PageErrorBoundary>
     </>
   )
 }

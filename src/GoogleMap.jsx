@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MarkerClusterer } from '@googlemaps/markerclusterer'
+import Supercluster from 'supercluster'
 import { GOOGLE_MAPS_KEY, popupHtml } from './mapsData'
 
 /* ---------- load the Google Maps script once ---------- */
@@ -8,7 +8,8 @@ let loader = null
 let authFailed = false
 const authListeners = new Set()
 
-function loadGoogleMaps() {
+// Safe to call early (e.g. when the maps page opens): loading the script is not a billed map load.
+export function preloadGoogleMaps() {
   if (window.google?.maps?.Map) return Promise.resolve(window.google.maps)
   if (loader) return loader
   loader = new Promise((resolve, reject) => {
@@ -25,17 +26,22 @@ function loadGoogleMaps() {
   return loader
 }
 
+// Fewer things to draw: hide points of interest and transit everywhere.
+const LEAN = [
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+]
+
 // Dark roadmap that matches the site.
 const DARK = [
+  ...LEAN,
   { elementType: 'geometry', stylers: [{ color: '#1d1b16' }] },
   { elementType: 'labels.text.fill', stylers: [{ color: '#a1a1aa' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#111' }] },
   { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#4a4232' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
   { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2c2a24' }] },
   { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#5a4a1c' }] },
   { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#facc15' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0b1a26' }] },
 ]
 
@@ -46,91 +52,137 @@ const clusterSvg = (size) => 'data:image/svg+xml;charset=UTF-8,' + encodeURIComp
     <circle cx="20" cy="20" r="19" fill="#facc15" fill-opacity=".28"/>
     <circle cx="20" cy="20" r="14" fill="#facc15" stroke="#1a1400" stroke-width="1.5"/></svg>`)
 
-const renderer = {
-  render({ count, position }) {
-    const size = count < 10 ? 34 : count < 100 ? 40 : count < 1000 ? 48 : 56
-    return new window.google.maps.Marker({
-      position,
-      icon: { url: clusterSvg(size), scaledSize: new window.google.maps.Size(size, size), anchor: new window.google.maps.Point(size / 2, size / 2) },
-      label: { text: count >= 1000 ? (count / 1000).toFixed(1) + 'k' : String(count), color: '#1a1400', fontWeight: '700', fontSize: '12px' },
-      zIndex: 1000 + count,
-    })
-  },
-}
+const clusterSize = (n) => (n < 10 ? 34 : n < 100 ? 40 : n < 1000 ? 48 : 56)
 
-export default function GoogleMap({ points, colorOf, selected, onSelect, type, view, onView, fitKey }) {
+/*
+ * Instead of creating one Google marker per point (11k+ markers is slow), the points are
+ * clustered with Supercluster and only the clusters / points inside the visible area are
+ * drawn - usually a few hundred markers at most. Markers are re-used between redraws.
+ */
+export default function GoogleMap({ points, colorOf, selected, onSelect, type, view, onView, fitKey, active }) {
   const box = useRef(null)
   const map = useRef(null)
-  const clusterer = useRef(null)
-  const markers = useRef(new Map())
+  const index = useRef(null)
+  const byId = useRef(new Map())
+  const drawn = useRef(new Map()) // key -> marker currently on the map
   const highlight = useRef(null)
   const info = useRef(null)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState(authFailed ? 'auth' : null)
-  const cb = useRef({ onSelect, onView })
-  cb.current = { onSelect, onView }
+  const live = useRef({ onSelect, onView, colorOf, active })
+  live.current = { onSelect, onView, colorOf, active }
 
-  // load script + create map once
+  // Draw the clusters / points for the current view.
+  const redraw = () => {
+    const m = map.current
+    const b = m?.getBounds()
+    if (!m || !b || !index.current) return
+    const gm = window.google.maps
+    const ne = b.getNorthEast(), sw = b.getSouthWest()
+    const west = sw.lng(), east = ne.lng()
+    const bbox = west <= east ? [west, sw.lat(), east, ne.lat()] : [-180, sw.lat(), 180, ne.lat()]
+    const features = index.current.getClusters(bbox, Math.round(m.getZoom()))
+
+    const keep = new Set()
+    for (const f of features) {
+      const [lng, lat] = f.geometry.coordinates
+      const c = f.properties
+      const key = c.cluster ? `c${c.cluster_id}:${c.point_count}` : `p${c.id}`
+      keep.add(key)
+      if (drawn.current.has(key)) continue
+      let mk
+      if (c.cluster) {
+        const n = c.point_count, size = clusterSize(n)
+        mk = new gm.Marker({
+          position: { lat, lng }, map: m, zIndex: 1000 + n,
+          icon: { url: clusterSvg(size), scaledSize: new gm.Size(size, size), anchor: new gm.Point(size / 2, size / 2) },
+          label: { text: n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n), color: '#1a1400', fontWeight: '700', fontSize: '12px' },
+        })
+        const id = c.cluster_id
+        mk.addListener('click', () => {
+          m.panTo({ lat, lng })
+          m.setZoom(Math.min(index.current.getClusterExpansionZoom(id), 18))
+        })
+      } else {
+        const p = byId.current.get(c.id)
+        mk = new gm.Marker({
+          position: { lat, lng }, map: m, title: p.name,
+          icon: { path: gm.SymbolPath.CIRCLE, scale: 6, fillColor: live.current.colorOf(p.supplier), fillOpacity: 1, strokeColor: '#fff', strokeWeight: 1.5 },
+        })
+        mk.addListener('click', () => live.current.onSelect(p))
+      }
+      drawn.current.set(key, mk)
+    }
+    for (const [key, mk] of drawn.current) {
+      if (!keep.has(key)) { mk.setMap(null); drawn.current.delete(key) }
+    }
+  }
+
+  const clearDrawn = () => {
+    for (const mk of drawn.current.values()) mk.setMap(null)
+    drawn.current.clear()
+  }
+
+  // load script + create the map once (it is kept alive while the page is open)
   useEffect(() => {
-    let live = true
-    const onAuth = () => live && setError('auth')
+    let alive = true
+    const onAuth = () => alive && setError('auth')
     authListeners.add(onAuth)
-    loadGoogleMaps().then((gm) => {
-      if (!live) return
+    preloadGoogleMaps().then((gm) => {
+      if (!alive) return
       const m = new gm.Map(box.current, {
         center: { lat: view.lat, lng: view.lng }, zoom: view.zoom,
-        disableDefaultUI: true, zoomControl: true, scaleControl: true, fullscreenControl: false,
-        gestureHandling: 'greedy', clickableIcons: false,
+        disableDefaultUI: true, zoomControl: true, scaleControl: true,
+        gestureHandling: 'greedy', clickableIcons: false, keyboardShortcuts: false,
+        isFractionalZoomEnabled: false, styles: LEAN,
       })
       m.addListener('idle', () => {
+        redraw()
+        if (!live.current.active) return
         const c = m.getCenter(), b = m.getBounds()
         if (!b) return
         const ne = b.getNorthEast(), sw = b.getSouthWest()
-        cb.current.onView({ lat: c.lat(), lng: c.lng(), zoom: m.getZoom() },
+        live.current.onView({ lat: c.lat(), lng: c.lng(), zoom: m.getZoom() },
           { south: sw.lat(), west: sw.lng(), north: ne.lat(), east: ne.lng() })
       })
       info.current = new gm.InfoWindow()
-      clusterer.current = new MarkerClusterer({ map: m, renderer })
       map.current = m
       setReady(true)
-    }).catch((e) => live && setError(e.message))
+    }).catch((e) => alive && setError(e.message))
     return () => {
-      live = false
+      alive = false
       authListeners.delete(onAuth)
-      clusterer.current?.clearMarkers()
+      clearDrawn()
       highlight.current?.setMap(null)
-      markers.current.clear()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // map type
   useEffect(() => {
     if (!ready) return
-    map.current.setOptions({ mapTypeId: MAP_TYPES[type] ?? 'roadmap', styles: type === 'dark' ? DARK : null })
+    map.current.setOptions({ mapTypeId: MAP_TYPES[type] ?? 'roadmap', styles: type === 'dark' ? DARK : LEAN })
   }, [ready, type])
 
-  // markers
+  // (re)build the cluster index when the visible set or colors change
   useEffect(() => {
     if (!ready) return
-    const gm = window.google.maps
-    const list = points.map((p) => {
-      let mk = markers.current.get(p.id)
-      if (!mk) {
-        mk = new gm.Marker({
-          position: { lat: p.lat, lng: p.lng }, title: p.name,
-          icon: { path: gm.SymbolPath.CIRCLE, scale: 6, fillColor: colorOf(p.supplier), fillOpacity: 1, strokeColor: '#fff', strokeWeight: 1.5 },
-        })
-        mk.addListener('click', () => cb.current.onSelect(p))
-        markers.current.set(p.id, mk)
-      }
-      return mk
-    })
-    clusterer.current.clearMarkers()
-    clusterer.current.addMarkers(list)
-  }, [ready, points, colorOf])
+    byId.current = new Map(points.map((p) => [p.id, p]))
+    index.current = new Supercluster({ radius: 60, maxZoom: 16 }).load(points.map((p) => ({
+      type: 'Feature', properties: { id: p.id }, geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+    })))
+    clearDrawn()
+    redraw()
+  }, [ready, points, colorOf]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // when this map becomes the visible one, jump to the shared view
+  useEffect(() => {
+    if (!ready || !active) return
+    map.current.setCenter({ lat: view.lat, lng: view.lng })
+    map.current.setZoom(Math.round(view.zoom))
+  }, [ready, active]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!ready || !fitKey || !points.length) return
+    if (!ready || !fitKey || !active || !points.length) return
     const b = new window.google.maps.LatLngBounds()
     points.forEach((p) => b.extend({ lat: p.lat, lng: p.lng }))
     map.current.fitBounds(b, 30)
@@ -148,14 +200,15 @@ export default function GoogleMap({ points, colorOf, selected, onSelect, type, v
       position: pos, map: map.current, zIndex: 99999,
       icon: { path: gm.SymbolPath.CIRCLE, scale: 11, fillColor: colorOf(selected.supplier), fillOpacity: 1, strokeColor: '#facc15', strokeWeight: 3 },
     })
+    if (!active) return
     map.current.panTo(pos)
     if (map.current.getZoom() < 16) map.current.setZoom(17)
     info.current.setContent(popupHtml(selected, colorOf(selected.supplier)))
     info.current.open({ map: map.current, anchor: highlight.current })
-  }, [ready, selected, colorOf])
+  }, [ready, selected, colorOf]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="map-canvas">
+    <div className="map-canvas" hidden={!active}>
       <div ref={box} className="map-fill" />
       {!ready && !error && <div className="map-msg">กำลังโหลด Google Maps…</div>}
       {error && (
