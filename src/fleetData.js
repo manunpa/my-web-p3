@@ -36,7 +36,7 @@ const FIELDS = {
   devices: ['จำนวน GPS/CCTV', 'gpscctv'],
 }
 
-const norm = (s) => String(s ?? '').toLowerCase().replace(/[\s/._\-]/g, '')
+export const norm = (s) => String(s ?? '').toLowerCase().replace(/[\s/._\-]/g, '')
 
 function mapHeaders(headers) {
   const hs = headers.map(norm)
@@ -168,7 +168,7 @@ const PROVINCES = ('กรุงเทพมหานคร กระบี่ �
   'อุตรดิตถ์ อุทัยธานี อุบลราชธานี').split(' ')
 
 // The province is the last province name that appears in the address.
-function provinceOf(location) {
+export function provinceOf(location) {
   const s = location.replace(/กรุงเทพฯ|กทม\.?/g, 'กรุงเทพมหานคร')
   let best = null, at = -1
   for (const p of PROVINCES) {

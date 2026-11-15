@@ -1,20 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Bell, ShieldAlert, XCircle, Timer, RefreshCw, Search,
-  CheckCircle2, Clock3, AlertTriangle, CalendarRange,
+  CheckCircle2, Clock3, AlertTriangle,
 } from 'lucide-react'
 import { loadAlerts, API_URL, REFRESH_MS } from './fleetData'
-import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, MonthBars, Empty, nf, reduceMotion } from './charts'
-
-const DAY = 86400000
-
-const PERIODS = [
-  { id: 7, label: '7 วัน' },
-  { id: 30, label: '30 วัน' },
-  { id: 90, label: '90 วัน' },
-  { id: 0, label: 'ทั้งหมด' },
-  { id: 'custom', label: 'กำหนดเอง' },
-]
+import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, MonthBars, Empty, nf } from './charts'
+import {
+  DAY, times, dShort, dDay, dTime, hm, startOfDay, pctChange, countBy, toInput, rangeFor, monthly,
+  DashTabs, PeriodPicker, RangeBar, usePointerGlow,
+} from './dashShared'
 
 // Alert types: 3 validated categorical colors, the rest folded into a neutral "อื่นๆ".
 const TYPE_COLORS = ['#3987e5', '#d95926', '#199e70']
@@ -35,12 +29,6 @@ const RANKS = [
   { id: 'releasedBy', label: 'ผู้ปลด' },
 ]
 
-const times = (v) => `${nf.format(Math.round(v))} ครั้ง`
-const dShort = (d) => d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
-const dDay = (d) => d.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' })
-const dTime = (d) => (d ? d.toLocaleString('th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '–')
-const hm = (d) => d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-
 function fmtMin(m) {
   if (m === null || m === undefined || isNaN(m)) return '–'
   if (m < 60) return `${Math.round(m)} นาที`
@@ -49,45 +37,7 @@ function fmtMin(m) {
   return mm ? `${nf.format(h)} ชม. ${mm} นาที` : `${nf.format(h)} ชม.`
 }
 
-const startOfDay = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d }
-const pctChange = (now, before) => (before ? ((now - before) / before) * 100 : null)
 const avg = (rows) => (rows.length ? rows.reduce((s, r) => s + (r.minutes || 0), 0) / rows.length : 0)
-
-function countBy(rows, key) {
-  const m = new Map()
-  for (const r of rows) {
-    const k = r[key] || '(ไม่ระบุ)'
-    m.set(k, (m.get(k) || 0) + 1)
-  }
-  return [...m].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
-}
-
-/* ---------- date range ---------- */
-
-const pad = (n) => String(n).padStart(2, '0')
-// <input type="datetime-local"> uses "YYYY-MM-DDTHH:MM" in local time.
-const toInput = (t) => {
-  const d = new Date(t)
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-const fromInput = (s) => {
-  const d = s ? new Date(s) : null
-  return d && !isNaN(d) ? d.getTime() : null
-}
-
-// Returns { from, to } in ms, `to` exclusive.
-function rangeFor(records, period, custom) {
-  const end = startOfDay(Date.now()).getTime() + DAY
-  if (period === 'custom') {
-    const a = fromInput(custom.from), b = fromInput(custom.to)
-    if (a === null || b === null) return null
-    const [from, to] = a <= b ? [a, b] : [b, a]
-    return { from, to: to + 60000, kind: 'custom' } // include the whole "to" minute
-  }
-  if (period) return { from: end - period * DAY, to: end, kind: 'preset' }
-  if (!records.length) return null
-  return { from: startOfDay(Math.min(...records.map((r) => r.start))).getTime(), to: end, kind: 'all' }
-}
 
 // Colors follow the alert type, not its rank in the current range:
 // the 3 most common types overall get the 3 categorical colors; the rest are "อื่นๆ".
@@ -106,25 +56,6 @@ function splitTypes(rows, palette) {
   const parts = [...counts].map(([name, value]) => ({ name, value, color: palette.color(name) }))
   parts.push({ name: 'อื่นๆ', value: other, color: OTHER_COLOR })
   return parts
-}
-
-function monthly(records, palette, range) {
-  const now = new Date()
-  const months = []
-  for (let k = 11; k >= 0; k--) {
-    const start = new Date(now.getFullYear(), now.getMonth() - k, 1)
-    const end = new Date(now.getFullYear(), now.getMonth() - k + 1, 1)
-    const rows = records.filter((r) => r.start >= start && r.start < end)
-    months.push({
-      start, end,
-      label: start.toLocaleDateString('th-TH', { month: 'short' }),
-      full: start.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' }),
-      total: rows.length,
-      parts: splitTypes(rows, palette),
-      active: !range || (start.getTime() < range.to && end.getTime() > range.from),
-    })
-  }
-  return months
 }
 
 function analyse(records, range, palette, compareLabel) {
@@ -308,21 +239,12 @@ export default function Dashboard() {
     return () => clearInterval(id)
   }, [load])
 
-  // Background glow follows the pointer, like the other pages.
-  useEffect(() => {
-    if (reduceMotion()) return
-    const move = (e) => {
-      stage.current?.style.setProperty('--mx', e.clientX + 'px')
-      stage.current?.style.setProperty('--my', e.clientY + 'px')
-    }
-    addEventListener('pointermove', move)
-    return () => removeEventListener('pointermove', move)
-  }, [])
+  usePointerGlow(stage)
 
   const range = useMemo(() => rangeFor(state.records, period, custom), [state.records, period, custom])
   const palette = useMemo(() => typePalette(state.records), [state.records])
   const data = useMemo(() => analyse(state.records, range, palette, 'เทียบช่วงก่อนหน้าที่ยาวเท่ากัน'), [state.records, range, palette])
-  const months = useMemo(() => monthly(state.records, palette, range), [state.records, palette, range])
+  const months = useMemo(() => monthly(state.records, (rows) => splitTypes(rows, palette), range), [state.records, palette, range])
   const animKey = `${range?.from}:${range?.to}:${state.at?.getTime()}`
 
   const choose = (id) => {
@@ -345,6 +267,7 @@ export default function Dashboard() {
   return (
     <div className="stage scroll" ref={stage}>
       <main className="dash">
+        <DashTabs current="#/dashboard" />
         <header className="dash-head">
           <a href="#/" className="back"><ArrowLeft size={16} /> เมนู</a>
           <div className="dash-title">
@@ -357,36 +280,10 @@ export default function Dashboard() {
           <button type="button" className="icon-btn" onClick={load} disabled={busy} aria-label="โหลดข้อมูลใหม่" title="โหลดข้อมูลใหม่">
             <RefreshCw size={16} className={busy ? 'spin' : ''} />
           </button>
-          <div className="seg-ctl" role="radiogroup" aria-label="ช่วงเวลา">
-            {PERIODS.map((p) => (
-              <button key={p.id} type="button" role="radio" aria-checked={period === p.id}
-                className={period === p.id ? 'on' : ''} onClick={() => choose(p.id)}>
-                {p.id === 'custom' && <CalendarRange size={13} />}{p.label}
-              </button>
-            ))}
-          </div>
+          <PeriodPicker period={period} onChoose={choose} />
         </header>
 
-        {period === 'custom' && (
-          <section className="range-bar" aria-label="กำหนดช่วงวันและเวลา">
-            <label>
-              <span>ตั้งแต่</span>
-              <input type="datetime-local" value={custom.from} max={custom.to || undefined}
-                onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} />
-            </label>
-            <span className="range-arrow" aria-hidden="true">→</span>
-            <label>
-              <span>ถึง</span>
-              <input type="datetime-local" value={custom.to} min={custom.from || undefined}
-                onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} />
-            </label>
-            <p className="range-note">
-              {badRange
-                ? 'กรุณาเลือกวันและเวลาให้ครบทั้งสองช่อง'
-                : `${dTime(new Date(range.from))} – ${dTime(new Date(range.to - 60000))} · ${nf.format(data?.rows.length ?? 0)} รายการ`}
-            </p>
-          </section>
-        )}
+        {period === 'custom' && <RangeBar custom={custom} setCustom={setCustom} range={range} count={data?.rows.length ?? 0} />}
 
         {state.error && state.status === 'ready' && (
           <p className="banner" role="alert">โหลดข้อมูลล่าสุดไม่สำเร็จ ({state.error}) กำลังแสดงข้อมูลชุดก่อนหน้า</p>

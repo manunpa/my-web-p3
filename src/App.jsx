@@ -4,6 +4,7 @@ import { auth } from './firebase'
 import LoginV7 from './LoginV7'
 import Home from './Home'
 import Dashboard from './Dashboard'
+import HelpDashboard from './HelpDashboard'
 import SessionTimer from './SessionTimer'
 import PageErrorBoundary from './PageErrorBoundary'
 import { saveUser } from './saveUser'
@@ -20,6 +21,7 @@ const SESSION_MS = 30 * 60 * 1000
 const ROUTES = {
   '/': Home,
   '/dashboard': Dashboard,
+  '/dashboard/help': HelpDashboard,
   '/maps': MapsPage,
 }
 
