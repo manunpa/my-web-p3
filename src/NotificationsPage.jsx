@@ -144,8 +144,8 @@ function NotifItem({ src, n, a, i, isNew, now, user, onError }) {
           <button type="button" className="na" onClick={startNote} disabled={saving || editing}>
             <StickyNote size={13} /> {note ? 'แก้หมายเหตุ' : 'หมายเหตุ'}
           </button>
-          {n.link && <a className="na" href={n.link} target="_blank" rel="noopener noreferrer"><ExternalLink size={13} /> เปิดลิงก์</a>}
           {n.video && <a className="na" href={n.video} target="_blank" rel="noopener noreferrer"><Video size={13} /> ดูวิดีโอ</a>}
+          {n.link && <a className="na" href={n.link} target="_blank" rel="noopener noreferrer"><ExternalLink size={13} /> {n.linkLabel || 'เปิดลิงก์'}</a>}
           {n.mapUrl && <a className="na" href={n.mapUrl} target="_blank" rel="noopener noreferrer"><MapPin size={13} /> แผนที่</a>}
           <button type="button" className="na ghost" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
             <ChevronDown size={13} className="chev" /> รายละเอียด
@@ -174,6 +174,7 @@ export const NOTIF_TABS = [
   { id: 'pms', href: '#/notifications' },
   { id: 'ngv', href: '#/notifications/ngv' },
   { id: 'ob', href: '#/notifications/ob' },
+  { id: 'ttt', href: '#/notifications/ttt' },
 ]
 
 export default function NotificationsPage({ user, source = 'pms' }) {

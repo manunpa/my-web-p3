@@ -108,6 +108,32 @@ export const SOURCES = {
       video: url(get('video')),
     }),
   },
+  ttt: {
+    label: 'TTT',
+    url: 'https://script.google.com/macros/s/AKfycbxTiiT_N_xfUx0DkoVcYSk7ee8XHW25CimN48z-TRARi0zoHG7wz-Qn35hs-OmKbUplwQ/exec',
+    prefix: 'ttt_',
+    fields: {
+      id: ['message_id'], time: ['เวลา'], received: ['received_at'],
+      device: ['ชื่อรถ'], status: ['สถานะ'], type: ['ประเภท'], group: ['ชื่อกลุ่มรถ', 'ชื่อกลุ่ม'], driver: ['พขร'],
+      speed: ['ความเร็ว'], area: ['ชื่อพื้นที่'], station: ['สถานี'], location: ['สถานที่'],
+      lat: ['lat'], lon: ['lon'], map: ['แผนที่'], video: ['วิดีโอ mp4', 'วิดีโอ'], dtc: ['วิดีโอ DTC'],
+    },
+    build: (get) => ({
+      at: thaiTime(get('time')) ?? thaiTime(get('received')),
+      device: get('device'),
+      type: get('type') || get('status'),
+      sub: get('status'),
+      group: get('group'),
+      driver: blank(get('driver').replace(/\s+/g, ' ')),
+      speed: num(get('speed')),
+      location: [get('area'), get('station'), get('location')].filter(Boolean).join(' · '),
+      lat: num(get('lat')), lon: num(get('lon')),
+      mapUrl: url(get('map')),
+      video: url(get('video')),
+      link: url(get('dtc')),
+      linkLabel: 'วิดีโอ DTC',
+    }),
+  },
 }
 
 export function toNotifs(rows, src) {
