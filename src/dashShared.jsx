@@ -1,6 +1,6 @@
 /* Helpers and header pieces shared by the dashboards (fleet alerts, help button). */
 import { useEffect } from 'react'
-import { Bell, CalendarRange, Eye, LifeBuoy } from 'lucide-react'
+import { Bell, CalendarRange, ClipboardCheck, Eye, LifeBuoy } from 'lucide-react'
 import { nf, reduceMotion } from './charts'
 
 export const DAY = 86400000
@@ -10,6 +10,7 @@ export const DASHBOARDS = [
   { href: '#/dashboard', label: 'LEO System', icon: Bell },
   { href: '#/dashboard/help', label: 'ปุ่มช่วยเหลือ', icon: LifeBuoy },
   { href: '#/dashboard/adas', label: 'ADAS / DMS', icon: Eye },
+  { href: '#/dashboard/behavior', label: 'พฤติกรรม พขร.', icon: ClipboardCheck },
 ]
 
 export const PERIODS = [
