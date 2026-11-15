@@ -1,15 +1,18 @@
 rules_version = '2';
 
 // Paste into Firebase Console -> Firestore Database -> Rules, then Publish.
+// Only accounts with a verified email get in.
 // Each user may only read and write their own users/{uid} document,
 // and only within 30 minutes of signing in (same as the website's session timer).
 // You (the owner) still see every user in the Firebase Console.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Signed in, and the sign-in happened less than 30 minutes ago.
+    // Signed in with a verified email (clicked the link, or Google sign-in),
+    // and the sign-in happened less than 30 minutes ago.
     function activeSession() {
       return request.auth != null
+        && request.auth.token.email_verified == true
         && request.time < timestamp.value(request.auth.token.auth_time * 1000) + duration.value(30, 'm');
     }
 

@@ -4,6 +4,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
+  sendEmailVerification,
   sendPasswordResetEmail,
   signInWithPopup,
   GoogleAuthProvider,
@@ -13,7 +14,7 @@ import {
 } from 'firebase/auth'
 import { auth } from './firebase'
 import { useTilt, ripple } from './useTilt'
-import { saveUser } from './saveUser'
+import { verifyLinkSettings } from './VerifyEmail'
 
 const explain = (code) => {
   switch (code) {
@@ -98,7 +99,8 @@ export default function LoginV7({ notice, onProfileUpdated }) {
       if (signingUp) {
         const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password)
         await updateProfile(user, { displayName: name.trim() })
-        await saveUser(user) // the first save ran before the name was set; add it now
+        // App then shows the "check your email" page; the user is saved to Firestore once verified.
+        await sendEmailVerification(user, verifyLinkSettings()).catch((err) => console.error(err))
         onProfileUpdated?.()
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password)

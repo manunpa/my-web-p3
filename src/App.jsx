@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from './firebase'
 import LoginV7 from './LoginV7'
+import VerifyEmail from './VerifyEmail'
 import Home from './Home'
 import Dashboard from './Dashboard'
 import HelpDashboard from './HelpDashboard'
@@ -47,7 +48,7 @@ export default function App() {
     setUser(u)
     if (u) {
       setNotice(null)
-      saveUser(u)
+      if (u.emailVerified) saveUser(u) // unverified accounts are saved by VerifyEmail once confirmed
     } else {
       setVerified(null)
       setDeadline(null)
@@ -92,6 +93,8 @@ export default function App() {
 
   if (user === undefined) return <div className="stage" />
   if (!user) return <LoginV7 key={notice} notice={notice} onProfileUpdated={refresh} />
+  // Email/password accounts must click the link in their email first (Google accounts are already verified).
+  if (!user.emailVerified) return <VerifyEmail user={user} onVerified={refresh} onSignOut={() => end(null)} />
   if (verified !== `${user.uid}:${route}` || deadline === null) return <div className="stage" />
 
   const Page = ROUTES[route] ?? Home
