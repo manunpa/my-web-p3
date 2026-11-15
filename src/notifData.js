@@ -86,6 +86,28 @@ export const SOURCES = {
       video: url(get('video')),
     }),
   },
+  ob: {
+    label: 'OB',
+    url: 'https://script.google.com/macros/s/AKfycbwvRpEnb_BhS8klzmtyegScU5knjkFTldWrwHjV0JXJIJIh9gQMRTicy7wVtJ43GN5pzA/exec',
+    prefix: 'ob_',
+    fields: {
+      id: ['message_id'], time: ['เวลา'], received: ['received_at'],
+      device: ['ชื่อรถ'], status: ['สถานะ'], type: ['ประเภท'], group: ['ชื่อกลุ่ม', 'ชื่อกลุ่มรถ'], speed: ['ความเร็ว'],
+      location: ['สถานที่'], lat: ['lat'], lon: ['lon'], map: ['แผนที่'], video: ['วิดีโอ'],
+    },
+    build: (get) => ({
+      at: thaiTime(get('time')) ?? thaiTime(get('received')),
+      device: get('device'),
+      type: get('type') || get('status'),
+      sub: get('status'),
+      group: get('group'),
+      speed: num(get('speed')),
+      location: get('location'),
+      lat: num(get('lat')), lon: num(get('lon')),
+      mapUrl: url(get('map')),
+      video: url(get('video')),
+    }),
+  },
 }
 
 export function toNotifs(rows, src) {
@@ -105,7 +127,7 @@ export function toNotifs(rows, src) {
     const hasPos = n.lat !== null && n.lon !== null && !(n.lat === 0 && n.lon === 0)
     const type = n.type || '(ไม่ระบุ)'
     out.push({
-      deviceNo: '', group: '', driver: '', location: '', satellites: null, link: '', video: '', ...n,
+      deviceNo: '', group: '', driver: '', location: '', satellites: null, speed: null, link: '', video: '', ...n,
       id,
       key: src.prefix + id,
       device: n.device || '(ไม่ระบุ)',

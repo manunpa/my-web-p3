@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle, ArrowLeft, Bell, BellRing, CheckCheck, ChevronDown, Cigarette, Eye, EyeOff, ExternalLink,
-  Filter, MapPin, RefreshCw, Route, Satellite, ScanEye, Search, Siren, Smartphone, StickyNote, User, Users, Video, X,
+  Filter, Gauge, MapPin, RefreshCw, Route, Satellite, ScanEye, Search, Siren, Smartphone, StickyNote, User, Users, Video, X,
 } from 'lucide-react'
 import {
   loadNotifs, watchActions, saveAction, saveActions, sendToSheet, SOURCES, STATUSES, NOTIF_REFRESH_MS,
@@ -109,6 +109,7 @@ function NotifItem({ src, n, a, i, isNew, now, user, onError }) {
           {n.group && <span><Users size={12} /> {n.group}</span>}
           {n.driver && <span><User size={12} /> พขร. {n.driver}</span>}
           <span title={dTime(n.at)}>{ago(n.at, now)} · {hm(n.at)} น.</span>
+          {n.speed !== null && <span><Gauge size={12} /> {nf.format(n.speed)} กม./ชม.</span>}
           {n.satellites !== null && <span><Satellite size={12} /> {n.satellites} ดวง</span>}
         </p>
         {n.location && <p className="notif-meta"><span><MapPin size={12} /> {n.location}</span></p>}
@@ -172,6 +173,7 @@ function NotifItem({ src, n, a, i, isNew, now, user, onError }) {
 export const NOTIF_TABS = [
   { id: 'pms', href: '#/notifications' },
   { id: 'ngv', href: '#/notifications/ngv' },
+  { id: 'ob', href: '#/notifications/ob' },
 ]
 
 export default function NotificationsPage({ user, source = 'pms' }) {
@@ -358,7 +360,7 @@ export default function NotificationsPage({ user, source = 'pms' }) {
               <div className="tools">
                 <label className="f search">
                   <Search size={15} />
-                  <input type="search" placeholder={source === 'ngv' ? 'ค้นหา ทะเบียนรถ กลุ่มรถ พขร. สถานที่ ประเภท หมายเหตุ…' : 'ค้นหา ชื่ออุปกรณ์ หมายเลข ประเภท หมายเหตุ…'}
+                  <input type="search" placeholder={source !== 'pms' ? 'ค้นหา ทะเบียนรถ กลุ่มรถ พขร. สถานที่ ประเภท หมายเหตุ…' : 'ค้นหา ชื่ออุปกรณ์ หมายเลข ประเภท หมายเหตุ…'}
                     value={q} onChange={(e) => setQ(e.target.value)} aria-label="ค้นหาแจ้งเตือน" />
                 </label>
                 <label className="f unit-pick">
