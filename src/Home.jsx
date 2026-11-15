@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  LayoutDashboard, User, FileText, BarChart3, Settings, Bell, ChevronRight, LogOut,
+  LayoutDashboard, Map as MapIcon, FileText, BarChart3, Settings, Bell, ChevronRight, LogOut,
 } from 'lucide-react'
 import { signOut } from 'firebase/auth'
 import { auth } from './firebase'
@@ -10,7 +10,7 @@ import { useTilt, ripple } from './useTilt'
 // `href` is where the button goes; '#' means the page is not built yet.
 const LINKS = [
   { label: 'Dashboard', hint: 'Overview at a glance', icon: LayoutDashboard, href: '#/dashboard' },
-  { label: 'Profile', hint: 'Your account details', icon: User, href: '#' },
+  { label: 'Maps API', hint: 'Customer station map', icon: MapIcon, href: '#/maps' },
   { label: 'Documents', hint: 'Files and records', icon: FileText, href: '#' },
   { label: 'Reports', hint: 'Charts and summaries', icon: BarChart3, href: '#' },
   { label: 'Notifications', hint: 'Latest updates', icon: Bell, href: '#' },

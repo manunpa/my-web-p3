@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from './firebase'
 import LoginV7 from './LoginV7'
@@ -6,6 +6,9 @@ import Home from './Home'
 import Dashboard from './Dashboard'
 import SessionTimer from './SessionTimer'
 import { saveUser } from './saveUser'
+
+// The map page pulls in the map libraries, so it is only downloaded when opened.
+const MapsPage = lazy(() => import('./MapsPage'))
 
 // How long a sign-in lasts before the user is signed out automatically.
 // Keep in sync with duration.value(30, 'm') in firestore.rules.
@@ -16,6 +19,7 @@ const SESSION_MS = 30 * 60 * 1000
 const ROUTES = {
   '/': Home,
   '/dashboard': Dashboard,
+  '/maps': MapsPage,
 }
 
 const currentRoute = () => location.hash.replace(/^#/, '') || '/'
@@ -92,7 +96,9 @@ export default function App() {
         deadline={deadline}
         onExpire={() => end('Your session expired after 30 minutes. Please sign in again.')}
       />
-      <Page user={user} />
+      <Suspense fallback={<div className="stage" />}>
+        <Page user={user} />
+      </Suspense>
     </>
   )
 }
