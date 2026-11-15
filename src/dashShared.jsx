@@ -7,7 +7,7 @@ export const DAY = 86400000
 
 // The dashboards, shown as tabs at the top of each one. Add new dashboards here and in App.jsx ROUTES.
 export const DASHBOARDS = [
-  { href: '#/dashboard', label: 'แจ้งเตือนรถขนส่ง', icon: Bell },
+  { href: '#/dashboard', label: 'LEO System', icon: Bell },
   { href: '#/dashboard/help', label: 'ปุ่มช่วยเหลือ', icon: LifeBuoy },
   { href: '#/dashboard/adas', label: 'ADAS / DMS', icon: Eye },
 ]
