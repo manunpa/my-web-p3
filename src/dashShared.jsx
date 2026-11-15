@@ -1,6 +1,6 @@
 /* Helpers and header pieces shared by the dashboards (fleet alerts, help button). */
 import { useEffect } from 'react'
-import { Bell, CalendarRange, LifeBuoy } from 'lucide-react'
+import { Bell, CalendarRange, Eye, LifeBuoy } from 'lucide-react'
 import { nf, reduceMotion } from './charts'
 
 export const DAY = 86400000
@@ -9,6 +9,7 @@ export const DAY = 86400000
 export const DASHBOARDS = [
   { href: '#/dashboard', label: 'แจ้งเตือนรถขนส่ง', icon: Bell },
   { href: '#/dashboard/help', label: 'ปุ่มช่วยเหลือ', icon: LifeBuoy },
+  { href: '#/dashboard/adas', label: 'ADAS / DMS', icon: Eye },
 ]
 
 export const PERIODS = [
@@ -61,7 +62,9 @@ export function rangeFor(records, period, custom) {
   }
   if (period) return { from: end - period * DAY, to: end, kind: 'preset' }
   if (!records.length) return null
-  return { from: startOfDay(Math.min(...records.map((r) => r.start))).getTime(), to: end, kind: 'all' }
+  // reduce, not Math.min(...): spreading tens of thousands of records can overflow the call stack.
+  const first = records.reduce((m, r) => Math.min(m, r.start), Infinity)
+  return { from: startOfDay(first).getTime(), to: end, kind: 'all' }
 }
 
 // Last 12 calendar months. split(rows) -> [{ name, value, color }] for the stacked bars.
