@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle, ArrowLeft, Bell, BellRing, CheckCheck, ChevronDown, Cigarette, Eye, EyeOff, ExternalLink,
-  Filter, MapPin, RefreshCw, Satellite, ScanEye, Search, Smartphone, StickyNote, X,
+  Filter, MapPin, RefreshCw, Route, Satellite, ScanEye, Search, Siren, Smartphone, StickyNote, User, Users, Video, X,
 } from 'lucide-react'
 import {
-  loadNotifs, watchActions, saveAction, saveActions, sendToSheet, STATUSES, NOTIF_REFRESH_MS,
+  loadNotifs, watchActions, saveAction, saveActions, sendToSheet, SOURCES, STATUSES, NOTIF_REFRESH_MS,
 } from './notifData'
 import { Panel, Kpi, Empty, nf } from './charts'
 import { DAY, dDay, dTime, hm, startOfDay, usePointerGlow } from './dashShared'
 
 const PAGE = 30
-const SEEN_KEY = 'notif:lastSeen'
 const count = (v) => nf.format(Math.round(v))
 
 // Buttons that set how an alert was handled. Pressing the active one again puts it back to "ใหม่".
@@ -21,7 +20,9 @@ const HANDLE = [
 ]
 
 function typeIcon(n) {
-  const t = `${n.type} ${n.typeEn}`
+  const t = `${n.type} ${n.sub}`
+  if (/emergency|ฉุกเฉิน|sos/i.test(t)) return Siren
+  if (/route|เส้นทาง/i.test(t)) return Route
   if (/eye|ปิดตา|หลับ|yawn|หาว|ง่วง|fatigue/i.test(t)) return EyeOff
   if (/phone|โทรศัพท์/i.test(t)) return Smartphone
   if (/smok|บุหรี่/i.test(t)) return Cigarette
@@ -42,9 +43,11 @@ function dayLabel(d, now) {
   return diff === 0 ? 'วันนี้' : diff === 1 ? 'เมื่อวาน' : dDay(d)
 }
 
+// Last alert time seen, per feed. PMS keeps the original key so its "ใหม่" tags carry on.
+const seenKey = (id) => (id === 'pms' ? 'notif:lastSeen' : `notif:lastSeen:${id}`)
 const store = {
-  get: () => { try { return Number(localStorage.getItem(SEEN_KEY)) || null } catch { return null } },
-  set: (v) => { try { localStorage.setItem(SEEN_KEY, String(v)) } catch { /* private mode */ } },
+  get: (id) => { try { return Number(localStorage.getItem(seenKey(id))) || null } catch { return null } },
+  set: (id, v) => { try { localStorage.setItem(seenKey(id), String(v)) } catch { /* private mode */ } },
 }
 
 const dbError = (err) => (err?.code === 'permission-denied'
@@ -55,7 +58,7 @@ const sheetError = (err) => `บันทึกในเว็บแล้ว �
 
 /* ---------- one notification ---------- */
 
-function NotifItem({ n, a, i, isNew, now, user, onError }) {
+function NotifItem({ src, n, a, i, isNew, now, user, onError }) {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -70,7 +73,7 @@ function NotifItem({ n, a, i, isNew, now, user, onError }) {
     try {
       await saveAction(n, user, nextStatus, nextNote)
       // The sheet copy runs in the background; the page already shows the new status from Firestore.
-      sendToSheet([n], user, nextStatus, () => nextNote).catch((err) => onError(sheetError(err)))
+      sendToSheet(src, [n], user, nextStatus, () => nextNote).catch((err) => onError(sheetError(err)))
       return true
     } catch (err) {
       onError(dbError(err))
@@ -87,8 +90,6 @@ function NotifItem({ n, a, i, isNew, now, user, onError }) {
     if (await save(status, draft.trim())) setEditing(false)
   }
 
-  const mapUrl = n.hasPos ? `https://www.google.com/maps/search/?api=1&query=${n.lat},${n.lon}` : ''
-
   return (
     <li className={`notif s-${status}${isNew ? ' fresh' : ''}`} style={{ '--c': s.color, '--i': Math.min(i, 12) }}>
       <span className="notif-ic"><Icon size={18} /></span>
@@ -96,7 +97,7 @@ function NotifItem({ n, a, i, isNew, now, user, onError }) {
         <div className="notif-top">
           <div className="notif-title">
             <strong>{n.type}</strong>
-            {n.typeEn && n.typeEn !== n.type && <small>{n.typeEn}</small>}
+            {n.sub && <small>{n.sub}</small>}
             {isNew && <span className="new-tag">ใหม่</span>}
           </div>
           <span className="act">{s.label}</span>
@@ -105,9 +106,12 @@ function NotifItem({ n, a, i, isNew, now, user, onError }) {
         <p className="notif-meta">
           <span className="mono">{n.device}</span>
           {n.deviceNo && <span>หมายเลข {n.deviceNo}</span>}
+          {n.group && <span><Users size={12} /> {n.group}</span>}
+          {n.driver && <span><User size={12} /> พขร. {n.driver}</span>}
           <span title={dTime(n.at)}>{ago(n.at, now)} · {hm(n.at)} น.</span>
           {n.satellites !== null && <span><Satellite size={12} /> {n.satellites} ดวง</span>}
         </p>
+        {n.location && <p className="notif-meta"><span><MapPin size={12} /> {n.location}</span></p>}
 
         {a && status !== 'new' && a.byName && (
           <p className="notif-by">{s.label}โดย {a.byName}{a.at && ` · ${dTime(a.at)}`}</p>
@@ -140,7 +144,8 @@ function NotifItem({ n, a, i, isNew, now, user, onError }) {
             <StickyNote size={13} /> {note ? 'แก้หมายเหตุ' : 'หมายเหตุ'}
           </button>
           {n.link && <a className="na" href={n.link} target="_blank" rel="noopener noreferrer"><ExternalLink size={13} /> เปิดลิงก์</a>}
-          {mapUrl && <a className="na" href={mapUrl} target="_blank" rel="noopener noreferrer"><MapPin size={13} /> แผนที่</a>}
+          {n.video && <a className="na" href={n.video} target="_blank" rel="noopener noreferrer"><Video size={13} /> ดูวิดีโอ</a>}
+          {n.mapUrl && <a className="na" href={n.mapUrl} target="_blank" rel="noopener noreferrer"><MapPin size={13} /> แผนที่</a>}
           <button type="button" className="na ghost" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
             <ChevronDown size={13} className="chev" /> รายละเอียด
           </button>
@@ -163,7 +168,14 @@ function NotifItem({ n, a, i, isNew, now, user, onError }) {
 
 /* ---------- page ---------- */
 
-export default function NotificationsPage({ user }) {
+// The feeds, shown as a switch at the top. Each one has its own route in App.jsx.
+export const NOTIF_TABS = [
+  { id: 'pms', href: '#/notifications' },
+  { id: 'ngv', href: '#/notifications/ngv' },
+]
+
+export default function NotificationsPage({ user, source = 'pms' }) {
+  const src = SOURCES[source]
   const [state, setState] = useState({ status: 'loading', items: [], error: null, at: null })
   const [busy, setBusy] = useState(false)
   const [actions, setActions] = useState(new Map())
@@ -174,23 +186,23 @@ export default function NotificationsPage({ user }) {
   const [limit, setLimit] = useState(PAGE)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [now, setNow] = useState(Date.now())
-  const [prevSeen] = useState(store.get) // alerts after this time get the "ใหม่" tag
+  const [prevSeen] = useState(() => store.get(source)) // alerts after this time get the "ใหม่" tag
   const stage = useRef(null)
   usePointerGlow(stage)
 
   const load = useCallback(async () => {
     setBusy(true)
     try {
-      const items = await loadNotifs()
+      const items = await loadNotifs(src)
       setState({ status: 'ready', items, error: null, at: new Date() })
-      if (items[0]) store.set(Math.max(items[0].at.getTime(), store.get() || 0))
+      if (items[0]) store.set(source, Math.max(items[0].at.getTime(), store.get(source) || 0))
     } catch (err) {
       setState((s) => ({ ...s, status: s.items.length ? 'ready' : 'error', error: err.message || String(err) }))
     } finally {
       setBusy(false)
       setNow(Date.now())
     }
-  }, [])
+  }, [src, source])
 
   // Reload every minute while the tab is visible, and right away when it becomes visible again.
   useEffect(() => {
@@ -210,7 +222,7 @@ export default function NotificationsPage({ user }) {
   }, [since])
 
   const statusOf = useCallback((n) => {
-    const s = actions.get(n.id)?.status
+    const s = actions.get(n.key)?.status
     return s && STATUSES[s] ? s : 'new'
   }, [actions])
 
@@ -248,8 +260,8 @@ export default function NotificationsPage({ user }) {
       if (show === 'open' ? st !== 'new' && st !== 'ack' : show !== 'all' && st !== show) return false
       if (type && n.type !== type) return false
       if (!s) return true
-      const note = actions.get(n.id)?.note || ''
-      return [n.type, n.typeEn, n.device, n.deviceNo, n.id, note].some((v) => v && v.toLowerCase().includes(s))
+      const note = actions.get(n.key)?.note || ''
+      return [n.type, n.sub, n.device, n.deviceNo, n.group, n.driver, n.location, n.id, note].some((v) => v && v.toLowerCase().includes(s))
     })
   }, [items, q, show, type, statusOf, actions])
 
@@ -271,9 +283,9 @@ export default function NotificationsPage({ user }) {
     if (!confirm(`ตั้งสถานะ "รับทราบ" ให้แจ้งเตือนใหม่ที่แสดงอยู่ ${nf.format(pendingShown.length)} รายการ?`)) return
     setBulkBusy(true)
     try {
-      const notes = (n) => actions.get(n.id)?.note || ''
+      const notes = (n) => actions.get(n.key)?.note || ''
       await saveActions(pendingShown, user, 'ack', notes)
-      sendToSheet(pendingShown, user, 'ack', notes).catch((err) => setDbErr(sheetError(err)))
+      sendToSheet(src, pendingShown, user, 'ack', notes).catch((err) => setDbErr(sheetError(err)))
     } catch (err) {
       setDbErr(dbError(err))
     } finally {
@@ -297,7 +309,7 @@ export default function NotificationsPage({ user }) {
         <header className="dash-head">
           <a href="#/" className="back"><ArrowLeft size={16} /> เมนู</a>
           <div className="dash-title">
-            <h1>รายการ<b>แจ้งเตือน</b></h1>
+            <h1>รายการแจ้งเตือน <b>{src.label}</b></h1>
             <p className="sub">
               ข้อความจาก Telegram · อัปเดตทุก 1 นาที
               {state.at && ` · ล่าสุด ${hm(state.at)} น.`}
@@ -306,6 +318,14 @@ export default function NotificationsPage({ user }) {
           <button type="button" className="icon-btn" onClick={load} disabled={busy} aria-label="โหลดข้อมูลใหม่" title="โหลดข้อมูลใหม่">
             <RefreshCw size={16} className={busy ? 'spin' : ''} />
           </button>
+          <nav className="seg-ctl" aria-label="เลือกชุดแจ้งเตือน">
+            {NOTIF_TABS.map((t) => (
+              <a key={t.id} href={t.href} className={`seg-link${t.id === source ? ' on' : ''}`}
+                aria-current={t.id === source ? 'page' : undefined}>
+                <Bell size={13} /> {SOURCES[t.id].label}
+              </a>
+            ))}
+          </nav>
         </header>
 
         {state.error && state.status === 'ready' && (
@@ -338,7 +358,7 @@ export default function NotificationsPage({ user }) {
               <div className="tools">
                 <label className="f search">
                   <Search size={15} />
-                  <input type="search" placeholder="ค้นหา ชื่ออุปกรณ์ หมายเลข ประเภท หมายเหตุ…"
+                  <input type="search" placeholder={source === 'ngv' ? 'ค้นหา ทะเบียนรถ กลุ่มรถ พขร. สถานที่ ประเภท หมายเหตุ…' : 'ค้นหา ชื่ออุปกรณ์ หมายเลข ประเภท หมายเหตุ…'}
                     value={q} onChange={(e) => setQ(e.target.value)} aria-label="ค้นหาแจ้งเตือน" />
                 </label>
                 <label className="f unit-pick">
@@ -370,7 +390,7 @@ export default function NotificationsPage({ user }) {
                   <h3>{g.label}</h3>
                   <ul className="notif-list">
                     {g.items.map((n) => (
-                      <NotifItem key={n.id} n={n} a={actions.get(n.id)} i={idx++} now={now} user={user}
+                      <NotifItem key={n.id} src={src} n={n} a={actions.get(n.key)} i={idx++} now={now} user={user}
                         isNew={prevSeen !== null && n.at.getTime() > prevSeen && statusOf(n) === 'new'}
                         onError={setDbErr} />
                     ))}

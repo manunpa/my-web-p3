@@ -15,7 +15,8 @@
  *     ลิงก์ /exec เดิมจะใช้โค้ดใหม่ ไม่ต้องแก้ลิงก์ในเว็บ
  *
  * สิ่งที่ทำ
- *  - หาแท็บแรกที่แถวหัวคอลัมน์มี "message_id" (หรือกำหนด SHEET_NAME เอง)
+ *  - หาแท็บแรกที่แถวหัวคอลัมน์มี "message_id" (หรือกำหนด NOTIF_SHEET_NAME เอง)
+ *  - ใช้ไฟล์เดียวกันนี้ได้ทั้งสคริปต์ PMS และ NGV
  *  - เพิ่มคอลัมน์ท้ายตารางให้อัตโนมัติถ้ายังไม่มี: สถานะการจัดการ, หมายเหตุการจัดการ, ผู้ดำเนินการ, เวลาดำเนินการ
  *  - หาแถวที่ message_id ตรงกัน แล้วเขียนทับ 4 ช่องนั้น
  *
@@ -24,7 +25,7 @@
  * ตอบกลับ: { "ok": true, "updated": 1, "notFound": [] }  หรือ  { "error": "..." }
  */
 
-const NOTIF_SHEET_NAME = 'VSS Alerts' // same tab as SHEET_NAME in Code.gs; '' = find the tab with a message_id column
+const NOTIF_SHEET_NAME = '' // tab name, e.g. 'VSS Alerts'; '' or a missing tab = use the first tab with a message_id column
 const NOTIF_ID_HEADER = 'message_id'
 const NOTIF_SOURCE = 'notif-page' // must match the website's request
 const NOTIF_COLUMNS = ['สถานะการจัดการ', 'หมายเหตุการจัดการ', 'ผู้ดำเนินการ', 'เวลาดำเนินการ']
@@ -95,8 +96,7 @@ function saveNotifActions(items) {
 function findNotifSheet(ss) {
   if (NOTIF_SHEET_NAME) {
     const s = ss.getSheetByName(NOTIF_SHEET_NAME)
-    if (!s) throw new Error('ไม่พบชีตชื่อ "' + NOTIF_SHEET_NAME + '"')
-    return s
+    if (s) return s
   }
   const found = ss.getSheets().find((s) => {
     const n = s.getLastColumn()

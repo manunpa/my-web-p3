@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ */
-/* Notifications: alerts forwarded from Telegram (Apps Script API)     */
+/* Notifications: alerts forwarded from Telegram (Apps Script APIs)    */
 /* plus how the team has handled each one (Firestore notifActions).    */
 /* ------------------------------------------------------------------ */
 import {
@@ -9,9 +9,6 @@ import { db } from './firebase'
 import { decode } from './adasData'
 import { norm } from './fleetData'
 
-// Web app URL that returns the Telegram messages (ends with /exec). `limit` = newest N messages.
-export const NOTIF_API_URL =
-  'https://script.google.com/macros/s/AKfycbyrSPxsAz9pY1Rswe1tIsvyg3sAq3Yh3wbWg2RmZCe6xMeTh4YiakBFWSBDWpgOYAuvIg/exec'
 export const NOTIF_LIMIT = 500
 export const NOTIF_REFRESH_MS = 60 * 1000
 
@@ -23,21 +20,7 @@ export const STATUSES = {
   false: { label: 'แจ้งเตือนผิดพลาด', color: '#898781' },
 }
 
-// Column names from the API -> field names (matching ignores spaces, '/', '.', '-', '_' and case).
-const FIELDS = {
-  id: ['message_id'],
-  alarm: ['เวลาปลุก'],
-  device: ['ชื่ออุปกรณ์'],
-  deviceNo: ['หมายเลขอุปกรณ์'],
-  typeTh: ['ประเภทสัญญาณเตือน'],
-  typeEn: ['Type'],
-  satellites: ['satellites'],
-  lat: ['lat'],
-  lon: ['lon'],
-  link: ['ลิงก์', 'link'],
-  sent: ['เวลาส่ง'],
-  received: ['received_at'],
-}
+/* ---------- cell helpers ---------- */
 
 // "2026-11-15 14:50:31" is Thailand time (UTC+7) whatever the viewer's time zone.
 function thaiTime(s) {
@@ -53,35 +36,82 @@ const num = (s) => {
   const n = parseFloat(String(s ?? '').trim())
   return isNaN(n) ? null : n
 }
+const blank = (s) => (/^(-|—|n\/?a|null|undefined)$/i.test(s) ? '' : s)
+const url = (s) => (/^https?:\/\//i.test(s) ? s : '')
 
-export function toNotifs(rows) {
+/* ---------- the alert feeds ---------- */
+
+// Each feed: its API, the column names it uses, and how a row becomes an alert.
+// `prefix` keeps Firestore ids apart, because two Telegram chats can reuse the same message_id.
+export const SOURCES = {
+  pms: {
+    label: 'PMS',
+    url: 'https://script.google.com/macros/s/AKfycbyrSPxsAz9pY1Rswe1tIsvyg3sAq3Yh3wbWg2RmZCe6xMeTh4YiakBFWSBDWpgOYAuvIg/exec',
+    prefix: '', // PMS was first; its ids stay as they are so saved statuses keep working
+    fields: {
+      id: ['message_id'], alarm: ['เวลาปลุก'], sent: ['เวลาส่ง'], received: ['received_at'],
+      device: ['ชื่ออุปกรณ์'], deviceNo: ['หมายเลขอุปกรณ์'], typeTh: ['ประเภทสัญญาณเตือน'], typeEn: ['Type'],
+      satellites: ['satellites'], lat: ['lat'], lon: ['lon'], link: ['ลิงก์', 'link'],
+    },
+    build: (get) => ({
+      at: thaiTime(get('alarm')) ?? thaiTime(get('sent')) ?? thaiTime(get('received')),
+      device: get('device'),
+      deviceNo: get('deviceNo'),
+      type: get('typeTh') || get('typeEn'),
+      sub: get('typeEn'),
+      satellites: num(get('satellites')),
+      lat: num(get('lat')), lon: num(get('lon')),
+      link: url(get('link')),
+    }),
+  },
+  ngv: {
+    label: 'NGV',
+    url: 'https://script.google.com/macros/s/AKfycbxM29qIRUvgpWTpKeYNxRHWr3BSseuWgYYUunQZ5dyEXn7JrdDLTs0EQgrAwNmtPxshdw/exec',
+    prefix: 'ngv_',
+    fields: {
+      id: ['message_id'], time: ['เวลา'], received: ['received_at'],
+      device: ['ชื่อรถ'], status: ['สถานะ'], type: ['ประเภท'], group: ['ชื่อกลุ่มรถ'], driver: ['พขร'],
+      sim: ['เบอร์ซิม'], location: ['สถานที่'], lat: ['lat'], lon: ['lon'], map: ['แผนที่'], video: ['วิดีโอ'],
+    },
+    build: (get) => ({
+      at: thaiTime(get('time')) ?? thaiTime(get('received')),
+      device: get('device'),
+      type: get('type') || get('status'),
+      sub: get('status'),
+      group: get('group'),
+      driver: blank(get('driver')),
+      location: get('location'),
+      lat: num(get('lat')), lon: num(get('lon')),
+      mapUrl: url(get('map')),
+      video: url(get('video')),
+    }),
+  },
+}
+
+export function toNotifs(rows, src) {
   if (!rows.length) return []
   const headers = Object.keys(rows[0])
   const key = {}
-  for (const [f, names] of Object.entries(FIELDS)) {
+  for (const [f, names] of Object.entries(src.fields)) {
     key[f] = headers.find((h) => names.some((n) => norm(h) === norm(n)))
   }
-  const get = (row, f) => (key[f] ? String(row[key[f]] ?? '').trim() : '')
   const out = []
   for (const row of rows) {
-    const id = get(row, 'id')
-    const at = thaiTime(get(row, 'alarm')) ?? thaiTime(get(row, 'sent')) ?? thaiTime(get(row, 'received'))
-    if (!/^[\w-]{1,100}$/.test(id) || !at) continue
-    const lat = num(get(row, 'lat')), lon = num(get(row, 'lon'))
-    const link = get(row, 'link')
+    const get = (f) => (key[f] ? String(row[key[f]] ?? '').trim() : '')
+    const id = get('id')
+    if (!/^[\w-]{1,90}$/.test(id)) continue
+    const n = src.build(get)
+    if (!n.at) continue
+    const hasPos = n.lat !== null && n.lon !== null && !(n.lat === 0 && n.lon === 0)
+    const type = n.type || '(ไม่ระบุ)'
     out.push({
+      deviceNo: '', group: '', driver: '', location: '', satellites: null, link: '', video: '', ...n,
       id,
-      at,
-      sentAt: thaiTime(get(row, 'sent')),
-      receivedAt: thaiTime(get(row, 'received')),
-      device: get(row, 'device') || '(ไม่ระบุ)',
-      deviceNo: get(row, 'deviceNo'),
-      type: get(row, 'typeTh') || get(row, 'typeEn') || '(ไม่ระบุ)',
-      typeEn: get(row, 'typeEn'),
-      satellites: num(get(row, 'satellites')),
-      lat, lon,
-      hasPos: lat !== null && lon !== null && !(lat === 0 && lon === 0),
-      link: /^https?:\/\//i.test(link) ? link : '',
+      key: src.prefix + id,
+      device: n.device || '(ไม่ระบุ)',
+      type,
+      sub: n.sub && n.sub !== type ? n.sub : '',
+      mapUrl: n.mapUrl || (hasPos ? `https://www.google.com/maps/search/?api=1&query=${n.lat},${n.lon}` : ''),
       raw: row,
     })
   }
@@ -90,21 +120,22 @@ export function toNotifs(rows) {
   return out.sort((a, b) => b.at - a.at).filter((n) => !seen.has(n.id) && seen.add(n.id))
 }
 
-export async function loadNotifs() {
-  const res = await fetch(`${NOTIF_API_URL}?limit=${NOTIF_LIMIT}`, { cache: 'no-store' })
+export async function loadNotifs(src) {
+  const res = await fetch(`${src.url}?limit=${NOTIF_LIMIT}`, { cache: 'no-store' })
   if (!res.ok) throw new Error(`Could not load notifications (HTTP ${res.status}).`)
   const text = await res.text()
   if (/^\s*<(!doctype|html)/i.test(text)) throw new Error('The link returned a web page, not data. Is the script deployed with access "Anyone"?')
   const json = JSON.parse(text)
   if (json?.error) throw new Error(json.error)
-  return toNotifs(decode(json))
+  return toNotifs(decode(json), src)
 }
 
 /* ---------- handling status, shared by everyone (Firestore) ---------- */
 
 const COL = 'notifActions'
 
-// Live map of message id -> { status, note, byName, at } for alerts at or after `since`.
+// Live map of Firestore id (n.key) -> { status, note, byName, at } for alerts at or after `since`.
+// PMS and NGV share the collection; ids from the other feed simply never match.
 export function watchActions(since, onData, onError) {
   const q = query(collection(db, COL), where('alarmAt', '>=', Timestamp.fromDate(since)))
   return onSnapshot(q, (snap) => {
@@ -127,25 +158,25 @@ const entry = (n, user, status, note) => ({
 })
 
 export function saveAction(n, user, status, note) {
-  return setDoc(doc(db, COL, n.id), entry(n, user, status, note.slice(0, 500)))
+  return setDoc(doc(db, COL, n.key), entry(n, user, status, note.slice(0, 500)))
 }
 
 // Several alerts at once (max 500 per Firestore batch).
 export async function saveActions(list, user, status, notes) {
   for (let i = 0; i < list.length; i += 500) {
     const b = writeBatch(db)
-    for (const n of list.slice(i, i + 500)) b.set(doc(db, COL, n.id), entry(n, user, status, notes(n)))
+    for (const n of list.slice(i, i + 500)) b.set(doc(db, COL, n.key), entry(n, user, status, notes(n)))
     await b.commit()
   }
 }
 
-/* ---------- copy to the Google Sheet row of each alert (doPost in apps-script/telegram-notif-post.gs) ---------- */
+/* ---------- copy to the Google Sheet row of each alert (apps-script/telegram-notif-post.gs) ---------- */
 
 // text/plain avoids a CORS preflight, which Apps Script does not answer.
-export async function sendToSheet(list, user, status, notes) {
+export async function sendToSheet(src, list, user, status, notes) {
   const by = user.displayName || user.email || ''
   const items = list.map((n) => ({ id: n.id, status: STATUSES[status]?.label ?? status, note: notes(n), by }))
-  const res = await fetch(NOTIF_API_URL, {
+  const res = await fetch(src.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ source: 'notif-page', items }), // source tells doPost this is not a Telegram update
@@ -154,7 +185,7 @@ export async function sendToSheet(list, user, status, notes) {
   const text = await res.text()
   if (/^\s*<(!doctype|html)/i.test(text)) throw new Error('สคริปต์ตอบกลับเป็นหน้าเว็บ ยังไม่ได้ Deploy เวอร์ชันใหม่?')
   const json = JSON.parse(text)
-  if (json?.error === 'unauthorized') throw new Error('ยังไม่ได้เพิ่ม handleNotifPost ใน doPost เดิม หรือยังไม่ได้ Deploy เวอร์ชันใหม่')
+  if (json?.error === 'unauthorized') throw new Error(`สคริปต์ ${src.label} ยังไม่ได้เพิ่ม handleNotifPost ใน doPost หรือยังไม่ได้ Deploy เวอร์ชันใหม่`)
   if (json?.error) throw new Error(json.error)
   if (json?.notFound?.length) throw new Error(`ไม่พบ message_id ${json.notFound.slice(0, 5).join(', ')} ในชีต`)
   return json

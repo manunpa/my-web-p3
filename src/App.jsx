@@ -30,6 +30,7 @@ const ROUTES = {
   '/dashboard/behavior': BehaviorDashboard,
   '/maps': MapsPage,
   '/notifications': NotificationsPage,
+  '/notifications/ngv': (props) => <NotificationsPage {...props} source="ngv" />,
 }
 
 const currentRoute = () => location.hash.replace(/^#/, '') || '/'
