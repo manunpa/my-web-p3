@@ -138,3 +138,24 @@ export async function saveActions(list, user, status, notes) {
     await b.commit()
   }
 }
+
+/* ---------- copy to the Google Sheet row of each alert (doPost in apps-script/telegram-notif-post.gs) ---------- */
+
+// text/plain avoids a CORS preflight, which Apps Script does not answer.
+export async function sendToSheet(list, user, status, notes) {
+  const by = user.displayName || user.email || ''
+  const items = list.map((n) => ({ id: n.id, status: STATUSES[status]?.label ?? status, note: notes(n), by }))
+  const res = await fetch(NOTIF_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ source: 'notif-page', items }), // source tells doPost this is not a Telegram update
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const text = await res.text()
+  if (/^\s*<(!doctype|html)/i.test(text)) throw new Error('สคริปต์ตอบกลับเป็นหน้าเว็บ ยังไม่ได้ Deploy เวอร์ชันใหม่?')
+  const json = JSON.parse(text)
+  if (json?.error === 'unauthorized') throw new Error('ยังไม่ได้เพิ่ม handleNotifPost ใน doPost เดิม หรือยังไม่ได้ Deploy เวอร์ชันใหม่')
+  if (json?.error) throw new Error(json.error)
+  if (json?.notFound?.length) throw new Error(`ไม่พบ message_id ${json.notFound.slice(0, 5).join(', ')} ในชีต`)
+  return json
+}

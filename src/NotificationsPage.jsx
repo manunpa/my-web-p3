@@ -4,7 +4,7 @@ import {
   Filter, MapPin, RefreshCw, Satellite, ScanEye, Search, Smartphone, StickyNote, X,
 } from 'lucide-react'
 import {
-  loadNotifs, watchActions, saveAction, saveActions, STATUSES, NOTIF_REFRESH_MS,
+  loadNotifs, watchActions, saveAction, saveActions, sendToSheet, STATUSES, NOTIF_REFRESH_MS,
 } from './notifData'
 import { Panel, Kpi, Empty, nf } from './charts'
 import { DAY, dDay, dTime, hm, startOfDay, usePointerGlow } from './dashShared'
@@ -51,6 +51,8 @@ const dbError = (err) => (err?.code === 'permission-denied'
   ? 'ฐานข้อมูลยังไม่อนุญาตให้บันทึกสถานะ: คัดลอก firestore.rules ไปวางใน Firebase Console → Firestore → Rules แล้วกด Publish'
   : `บันทึกหรือโหลดสถานะไม่สำเร็จ (${err?.message || err})`)
 
+const sheetError = (err) => `บันทึกในเว็บแล้ว แต่ส่งเข้า Google Sheet ไม่สำเร็จ (${err?.message || err})`
+
 /* ---------- one notification ---------- */
 
 function NotifItem({ n, a, i, isNew, now, user, onError }) {
@@ -67,6 +69,8 @@ function NotifItem({ n, a, i, isNew, now, user, onError }) {
     setSaving(true)
     try {
       await saveAction(n, user, nextStatus, nextNote)
+      // The sheet copy runs in the background; the page already shows the new status from Firestore.
+      sendToSheet([n], user, nextStatus, () => nextNote).catch((err) => onError(sheetError(err)))
       return true
     } catch (err) {
       onError(dbError(err))
@@ -267,7 +271,9 @@ export default function NotificationsPage({ user }) {
     if (!confirm(`ตั้งสถานะ "รับทราบ" ให้แจ้งเตือนใหม่ที่แสดงอยู่ ${nf.format(pendingShown.length)} รายการ?`)) return
     setBulkBusy(true)
     try {
-      await saveActions(pendingShown, user, 'ack', (n) => actions.get(n.id)?.note || '')
+      const notes = (n) => actions.get(n.id)?.note || ''
+      await saveActions(pendingShown, user, 'ack', notes)
+      sendToSheet(pendingShown, user, 'ack', notes).catch((err) => setDbErr(sheetError(err)))
     } catch (err) {
       setDbErr(dbError(err))
     } finally {
