@@ -8,6 +8,7 @@ import Dashboard from './Dashboard'
 import HelpDashboard from './HelpDashboard'
 import AdasDashboard from './AdasDashboard'
 import BehaviorDashboard from './BehaviorDashboard'
+import NotificationsPage from './NotificationsPage'
 import SessionTimer from './SessionTimer'
 import PageErrorBoundary from './PageErrorBoundary'
 import { saveUser } from './saveUser'
@@ -28,6 +29,7 @@ const ROUTES = {
   '/dashboard/adas': AdasDashboard,
   '/dashboard/behavior': BehaviorDashboard,
   '/maps': MapsPage,
+  '/notifications': NotificationsPage,
 }
 
 const currentRoute = () => location.hash.replace(/^#/, '') || '/'

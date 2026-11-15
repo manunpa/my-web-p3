@@ -103,7 +103,7 @@ export async function loadAdas() {
 
 // Compact format from apps-script/adas-dms.gs: { headers, values: [uniques per column], rows: [[index...]] }.
 // Also accepts a plain array of row objects, or { sheetName: rows }.
-function decode(json) {
+export function decode(json) {
   if (Array.isArray(json?.rows) && Array.isArray(json?.headers)) {
     const { headers, values, rows } = json
     return rows.map((r) => {

@@ -13,7 +13,7 @@ const LINKS = [
   { label: 'Maps API', hint: 'Customer station map', icon: MapIcon, href: '#/maps' },
   { label: 'Documents', hint: 'Files and records', icon: FileText, href: '#' },
   { label: 'Reports', hint: 'Charts and summaries', icon: BarChart3, href: '#' },
-  { label: 'Notifications', hint: 'Latest updates', icon: Bell, href: '#' },
+  { label: 'Notifications', hint: 'Latest updates', icon: Bell, href: '#/notifications' },
   { label: 'Settings', hint: 'Preferences', icon: Settings, href: '#' },
 ]
 

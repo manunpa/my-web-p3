@@ -53,6 +53,27 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // How each Telegram alert on the Notifications page was handled: notifActions/{message_id}.
+    // Shared by the whole team: any signed-in user can read and set it, but only as themselves.
+    // No deletes: putting an alert back to "new" is a write with status 'new'.
+    match /notifActions/{id} {
+      allow read: if activeSession();
+
+      allow create, update: if activeSession()
+        && id.matches('^[A-Za-z0-9_-]{1,100}$')
+        && request.resource.data.keys().hasOnly(['status', 'note', 'alarmAt', 'by', 'byName', 'at'])
+        && request.resource.data.status in ['new', 'ack', 'done', 'false']
+        && request.resource.data.note is string
+        && request.resource.data.note.size() <= 500
+        && request.resource.data.alarmAt is timestamp
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.byName is string
+        && request.resource.data.byName.size() <= 100
+        && request.resource.data.at == request.time;
+
+      allow delete: if false;
+    }
+
     // Everything else is closed.
     match /{document=**} {
       allow read, write: if false;
