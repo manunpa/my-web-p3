@@ -134,6 +134,32 @@ export const SOURCES = {
       linkLabel: 'วิดีโอ DTC',
     }),
   },
+  bsrc: {
+    label: 'BSRC COC',
+    url: 'https://script.google.com/macros/s/AKfycbxLFR1aBglVpt49S33Vsk_H_iF68ePKfjq3UDUdhWEOAaIsEJpG_TMC90Mvs_3uTzm3/exec',
+    prefix: 'bsrc_',
+    fields: {
+      id: ['message_id'], time: ['เวลา'], received: ['received_at'],
+      device: ['ชื่อรถ'], status: ['สถานะ'], type: ['ประเภท'], group: ['ชื่อกลุ่มรถ', 'ชื่อกลุ่ม'], driver: ['พขร'],
+      speed: ['ความเร็ว'], location: ['สถานที่'], lat: ['lat'], lon: ['lon'], map: ['แผนที่'],
+      video: ['วิดีโอ mp4', 'วิดีโอ'], other: ['วิดีโอ อื่น'],
+    },
+    build: (get) => ({
+      at: thaiTime(get('time')) ?? thaiTime(get('received')),
+      device: get('device'),
+      type: get('type') || get('status'),
+      sub: get('status'),
+      group: get('group'),
+      driver: blank(get('driver').replace(/\s+/g, ' ')),
+      speed: num(get('speed')),
+      location: get('location'),
+      lat: num(get('lat')), lon: num(get('lon')),
+      mapUrl: url(get('map')),
+      video: url(get('video')),
+      link: url(get('other')),
+      linkLabel: 'วิดีโออื่น',
+    }),
+  },
 }
 
 export function toNotifs(rows, src) {
