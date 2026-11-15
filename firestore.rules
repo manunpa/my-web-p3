@@ -25,6 +25,31 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Shared daily counter of Google map loads: mapsQuota/{YYYYMMDD} = { count }.
+    // Only today's document (Thailand time) can be written, only +1 at a time, and never above 300.
+    // Keep 300 the same as GOOGLE_MAPS_DAILY_LIMIT in src/mapsQuota.js.
+    function thaiToday() {
+      let t = request.time + duration.value(7, 'h');
+      return string(t.year() * 10000 + t.month() * 100 + t.day());
+    }
+
+    match /mapsQuota/{day} {
+      allow read: if activeSession();
+
+      allow create: if activeSession()
+        && day == thaiToday()
+        && request.resource.data.keys().hasOnly(['count'])
+        && request.resource.data.count == 1;
+
+      allow update: if activeSession()
+        && day == thaiToday()
+        && request.resource.data.keys().hasOnly(['count'])
+        && request.resource.data.count == resource.data.count + 1
+        && request.resource.data.count <= 300;
+
+      allow delete: if false;
+    }
+
     // Everything else is closed.
     match /{document=**} {
       allow read, write: if false;

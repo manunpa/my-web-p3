@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Supercluster from 'supercluster'
 import { GOOGLE_MAPS_KEY, popupHtml } from './mapsData'
+import { GOOGLE_MAPS_DAILY_LIMIT, takeGoogleMapLoad, consumeGoogleMapLoad } from './mapsQuota'
 
 /* ---------- load the Google Maps script once ---------- */
 
@@ -128,8 +129,10 @@ export default function GoogleMap({ points, colorOf, selected, onSelect, type, v
     let alive = true
     const onAuth = () => alive && setError('auth')
     authListeners.add(onAuth)
-    preloadGoogleMaps().then((gm) => {
-      if (!alive) return
+    Promise.all([preloadGoogleMaps(), takeGoogleMapLoad()]).then(([gm, quota]) => {
+      if (!alive) return // keep the counted load for the next time the map opens
+      consumeGoogleMapLoad()
+      if (!quota.ok) { setError('quota'); return }
       const m = new gm.Map(box.current, {
         center: { lat: view.lat, lng: view.lng }, zoom: view.zoom,
         disableDefaultUI: true, zoomControl: true, scaleControl: true,
@@ -148,7 +151,9 @@ export default function GoogleMap({ points, colorOf, selected, onSelect, type, v
       info.current = new gm.InfoWindow()
       map.current = m
       setReady(true)
-    }).catch((e) => alive && setError(e.message))
+    }).catch((e) => alive && setError(e.code === 'permission-denied' || e.code === 'unavailable'
+      ? 'ตรวจสอบโควต้า Google Maps ไม่สำเร็จ จึงยังไม่โหลดแผนที่ (เพื่อไม่ให้เกิดค่าใช้จ่าย) ลองใหม่ภายหลัง หรือใช้ OpenStreetMap'
+      : e.message))
     return () => {
       alive = false
       authListeners.delete(onAuth)
@@ -213,7 +218,12 @@ export default function GoogleMap({ points, colorOf, selected, onSelect, type, v
       {!ready && !error && <div className="map-msg">กำลังโหลด Google Maps…</div>}
       {error && (
         <div className="map-msg err">
-          {error === 'auth' ? (
+          {error === 'quota' ? (
+            <>
+              <strong>วันนี้ใช้ Google Maps ครบ {GOOGLE_MAPS_DAILY_LIMIT} ครั้งแล้ว</strong>
+              <span>จำกัดไว้เพื่อไม่ให้เกินโควต้าฟรีของ Google ใช้ OpenStreetMap ไปก่อน แล้วเปิดใหม่ได้พรุ่งนี้ (นับใหม่ตอนเที่ยงคืน)</span>
+            </>
+          ) : error === 'auth' ? (
             <>
               <strong>Google Maps ปฏิเสธ API key นี้</strong>
               <span>ตรวจใน Google Cloud Console ว่าเปิด Maps JavaScript API และเปิด Billing แล้ว
