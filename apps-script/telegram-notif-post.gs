@@ -16,7 +16,7 @@
  *
  * สิ่งที่ทำ
  *  - หาแท็บแรกที่แถวหัวคอลัมน์มี "message_id" (หรือกำหนด NOTIF_SHEET_NAME เอง)
- *  - ใช้ไฟล์เดียวกันนี้ได้ทุกสคริปต์ (PMS เครื่อง 1/2, NGV, OB, TTT, BSRC) ดู NOTIF_COLUMNS สำหรับเครื่อง 2
+ *  - ใช้ไฟล์เดียวกันนี้ได้ทุกสคริปต์ (PMS/NGV/OB เครื่อง 1 และ 2, TTT, BSRC) เครื่อง 2 ให้ตั้ง NOTIF_SHEET_NAME เป็นชื่อแท็บ
  *  - เพิ่มคอลัมน์ท้ายตารางให้อัตโนมัติถ้ายังไม่มี: สถานะการจัดการ, หมายเหตุการจัดการ, ผู้ดำเนินการ, เวลาดำเนินการ
  *  - หาแถวที่ message_id ตรงกัน แล้วเขียนทับ 4 ช่องนั้น
  *
@@ -28,9 +28,10 @@
 const NOTIF_SHEET_NAME = '' // tab name, e.g. 'VSS Alerts'; '' or a missing tab = use the first tab with a message_id column
 const NOTIF_ID_HEADER = 'message_id'
 const NOTIF_SOURCE = 'notif-page' // must match the website's request
-// The 4 columns written: status, note, who, when. Existing columns are reused; missing ones are added at the end.
-// เครื่อง 2 (PMS: แท็บ SCC Evidence, NGV: แท็บ CCTV NGV Monitoring, OB: แท็บ SCA OB) มีคอลัมน์ตรวจสอบอยู่แล้ว ให้ใช้บรรทัดนี้แทน:
-//   const NOTIF_COLUMNS = ['ผลตรวจสอบ', 'หมายเหตุการจัดการ', 'ผู้ตรวจสอบ', 'เวลาตรวจสอบ']
+// The 4 columns written: status, note, who, when. Missing ones are added at the end of the header row.
+// เครื่อง 2 (PMS: แท็บ SCC Evidence, NGV: CCTV NGV Monitoring, OB: SCA OB) ใช้ค่านี้เหมือนกัน
+// ห้ามเปลี่ยนเป็น ผลตรวจสอบ/ผู้ตรวจสอบ/เวลาตรวจสอบ เพราะจะเขียนทับผลที่คนกรอกไว้ ให้ตั้งแค่ NOTIF_SHEET_NAME
+const NOTIF_COLUMNS = ['ผลตรวจสอบ', 'หมายเหตุการจัดการ', 'ผู้ตรวจสอบ', 'เวลาตรวจสอบ']
 const NOTIF_COLUMNS = ['สถานะการจัดการ', 'หมายเหตุการจัดการ', 'ผู้ดำเนินการ', 'เวลาดำเนินการ']
 
 function handleNotifPost(e) {
