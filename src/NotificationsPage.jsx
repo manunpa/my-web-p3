@@ -171,8 +171,8 @@ function NotifItem({ src, n, a, i, isNew, now, user, onError }) {
 
 // The feeds, shown as a switch at the top. Each one has its own route in App.jsx.
 export const NOTIF_TABS = [
-  { id: 'pms', href: '#/notifications' },
-  { id: 'pms2', href: '#/notifications/pms2' },
+  { id: 'pms', href: '#/notifications/pms' },
+  { id: 'pms2', href: '#/notifications' },
   { id: 'ngv', href: '#/notifications/ngv' },
   { id: 'ngv2', href: '#/notifications/ngv2' },
   { id: 'ob', href: '#/notifications/ob' },
@@ -183,7 +183,10 @@ export const NOTIF_TABS = [
   { id: 'bsrc2', href: '#/notifications/bsrc2' },
 ]
 
-export default function NotificationsPage({ user, source = 'pms' }) {
+// A feed's main button opens its last machine (Desk) by default.
+const defaultTab = (group) => NOTIF_TABS.filter((t) => SOURCES[t.id].group === group).at(-1)
+
+export default function NotificationsPage({ user, source = 'pms2' }) {
   const src = SOURCES[source]
   const [state, setState] = useState({ status: 'loading', items: [], error: null, at: null })
   const [busy, setBusy] = useState(false)
@@ -331,7 +334,7 @@ export default function NotificationsPage({ user, source = 'pms' }) {
             {NOTIF_TABS.filter((t) => !SOURCES[t.id].group || SOURCES[t.id].group === t.id).map((t) => {
               const on = (src.group || source) === t.id
               return (
-                <a key={t.id} href={t.href} className={`seg-link${on ? ' on' : ''}`}
+                <a key={t.id} href={(defaultTab(t.id) || t).href} className={`seg-link${on ? ' on' : ''}`}
                   aria-current={on ? 'page' : undefined}>
                   <Bell size={13} /> {SOURCES[t.id].label}
                 </a>

@@ -29,7 +29,8 @@ const ROUTES = {
   '/dashboard/adas': AdasDashboard,
   '/dashboard/behavior': BehaviorDashboard,
   '/maps': MapsPage,
-  '/notifications': NotificationsPage,
+  '/notifications': NotificationsPage, // opens PMS Desk
+  '/notifications/pms': (props) => <NotificationsPage {...props} source="pms" />,
   '/notifications/pms2': (props) => <NotificationsPage {...props} source="pms2" />,
   '/notifications/ngv': (props) => <NotificationsPage {...props} source="ngv" />,
   '/notifications/ngv2': (props) => <NotificationsPage {...props} source="ngv2" />,
