@@ -47,7 +47,7 @@ export const SOURCES = {
   pms: {
     label: 'PMS',
     group: 'pms',
-    sub: 'เครื่อง 1',
+    sub: 'Lap',
     url: 'https://script.google.com/macros/s/AKfycbyrSPxsAz9pY1Rswe1tIsvyg3sAq3Yh3wbWg2RmZCe6xMeTh4YiakBFWSBDWpgOYAuvIg/exec',
     prefix: '', // PMS was first; its ids stay as they are so saved statuses keep working
     fields: {
@@ -69,7 +69,7 @@ export const SOURCES = {
   pms2: {
     label: 'PMS 2',
     group: 'pms', // a sub-tab under PMS: the same alerts, logged by the second (24-hour) machine into its own sheet
-    sub: 'เครื่อง 2',
+    sub: 'Desk',
     url: 'https://script.google.com/macros/s/AKfycby2v9rxFWKJUB3t0Q8q75k0Cehb88o-E4cTx7BSSehs1LU6BNKditO3ko-3yRejDgVL/exec?key=2ece0a1e4e69f0c8ddc282d10dfdf1b0',
     prefix: 'pms2_',
     fields: {
@@ -92,7 +92,7 @@ export const SOURCES = {
   ngv: {
     label: 'NGV',
     group: 'ngv',
-    sub: 'เครื่อง 1',
+    sub: 'Lap',
     url: 'https://script.google.com/macros/s/AKfycbxM29qIRUvgpWTpKeYNxRHWr3BSseuWgYYUunQZ5dyEXn7JrdDLTs0EQgrAwNmtPxshdw/exec',
     prefix: 'ngv_',
     fields: {
@@ -116,7 +116,7 @@ export const SOURCES = {
   ngv2: {
     label: 'NGV 2',
     group: 'ngv', // the same alerts, logged by the second (24-hour) machine into its own sheet
-    sub: 'เครื่อง 2',
+    sub: 'Desk',
     url: 'https://script.google.com/macros/s/AKfycbz1ggXR9tfhX0zjmUZJjiupcovlWLVv00zS6L8eZ1aVZE4mVUihWqSdpdLafjW7P2ET/exec?key=1a24f9c5ddb6aeec4262ecb8f5e49da3',
     prefix: 'ngv2_',
     fields: {
@@ -140,7 +140,7 @@ export const SOURCES = {
   ob: {
     label: 'OB',
     group: 'ob',
-    sub: 'เครื่อง 1',
+    sub: 'Lap',
     url: 'https://script.google.com/macros/s/AKfycbwvRpEnb_BhS8klzmtyegScU5knjkFTldWrwHjV0JXJIJIh9gQMRTicy7wVtJ43GN5pzA/exec',
     prefix: 'ob_',
     fields: {
@@ -164,7 +164,7 @@ export const SOURCES = {
   ob2: {
     label: 'OB 2',
     group: 'ob', // the same alerts, logged by the second (24-hour) machine into its own sheet
-    sub: 'เครื่อง 2',
+    sub: 'Desk',
     url: 'https://script.google.com/macros/s/AKfycby_ELUU1hCoba2uL-A4b64J4OxBs6X5E6_HaOu-6vJg_DhrNX5jMUWFgoMJUSgxCh1Kxw/exec?key=e825a6bcf83b639d92dc3157197cfdfc',
     prefix: 'ob2_',
     fields: {
@@ -188,7 +188,7 @@ export const SOURCES = {
   ttt: {
     label: 'TTT',
     group: 'ttt',
-    sub: 'เครื่อง 1',
+    sub: 'Lap',
     url: 'https://script.google.com/macros/s/AKfycbxTiiT_N_xfUx0DkoVcYSk7ee8XHW25CimN48z-TRARi0zoHG7wz-Qn35hs-OmKbUplwQ/exec',
     prefix: 'ttt_',
     fields: {
@@ -216,7 +216,7 @@ export const SOURCES = {
   ttt2: {
     label: 'TTT 2',
     group: 'ttt', // the same alerts, logged by the second (24-hour) machine into its own sheet
-    sub: 'เครื่อง 2',
+    sub: 'Desk',
     url: 'https://script.google.com/macros/s/AKfycbypAF8-VR3sfHgyvhW8pkrNJpjw7WWEbI5DU4sOv_Xi-IMMFLj9KMKaFySO4UYcrQNn/exec?key=d5a47996fd182ebf52971fd8b7403fd1',
     prefix: 'ttt2_',
     fields: {
@@ -242,7 +242,7 @@ export const SOURCES = {
   bsrc: {
     label: 'BSRC COC',
     group: 'bsrc',
-    sub: 'เครื่อง 1',
+    sub: 'Lap',
     url: 'https://script.google.com/macros/s/AKfycbxLFR1aBglVpt49S33Vsk_H_iF68ePKfjq3UDUdhWEOAaIsEJpG_TMC90Mvs_3uTzm3/exec',
     prefix: 'bsrc_',
     fields: {
@@ -270,7 +270,7 @@ export const SOURCES = {
   bsrc2: {
     label: 'BSRC COC 2',
     group: 'bsrc', // the same alerts, logged by the second (24-hour) machine into its own sheet
-    sub: 'เครื่อง 2',
+    sub: 'Desk',
     url: 'https://script.google.com/macros/s/AKfycbx7hgiz_BKEF-m2lfdGmV1LyYOt0-5dWXwgu8IbQzqFecrHnMDw3hj9UGcIBD0Bcqfi/exec?key=cf36d3977ad27f99516ca7619dac3d7e',
     prefix: 'bsrc2_',
     fields: {
