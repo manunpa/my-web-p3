@@ -32,6 +32,7 @@ const ROUTES = {
   '/notifications': NotificationsPage,
   '/notifications/pms2': (props) => <NotificationsPage {...props} source="pms2" />,
   '/notifications/ngv': (props) => <NotificationsPage {...props} source="ngv" />,
+  '/notifications/ngv2': (props) => <NotificationsPage {...props} source="ngv2" />,
   '/notifications/ob': (props) => <NotificationsPage {...props} source="ob" />,
   '/notifications/ttt': (props) => <NotificationsPage {...props} source="ttt" />,
   '/notifications/bsrc': (props) => <NotificationsPage {...props} source="bsrc" />,

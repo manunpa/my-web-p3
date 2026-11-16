@@ -91,6 +91,8 @@ export const SOURCES = {
   },
   ngv: {
     label: 'NGV',
+    group: 'ngv',
+    sub: 'เครื่อง 1',
     url: 'https://script.google.com/macros/s/AKfycbxM29qIRUvgpWTpKeYNxRHWr3BSseuWgYYUunQZ5dyEXn7JrdDLTs0EQgrAwNmtPxshdw/exec',
     prefix: 'ngv_',
     fields: {
@@ -109,6 +111,30 @@ export const SOURCES = {
       lat: num(get('lat')), lon: num(get('lon')),
       mapUrl: url(get('map')),
       video: url(get('video')),
+    }),
+  },
+  ngv2: {
+    label: 'NGV 2',
+    group: 'ngv', // the same alerts, logged by the second (24-hour) machine into its own sheet
+    sub: 'เครื่อง 2',
+    url: 'https://script.google.com/macros/s/AKfycbz1ggXR9tfhX0zjmUZJjiupcovlWLVv00zS6L8eZ1aVZE4mVUihWqSdpdLafjW7P2ET/exec?key=1a24f9c5ddb6aeec4262ecb8f5e49da3',
+    prefix: 'ngv2_',
+    fields: {
+      id: ['message_id'], time: ['เวลาเกิดเหตุ'], received: ['เวลาข้อความ'],
+      device: ['ชื่ออุปกรณ์', 'ชื่อรถ'], type: ['ประเภทสัญญาณเตือน', 'ประเภท'], group: ['กลุ่มรถ', 'ชื่อกลุ่มรถ'],
+      driver: ['พนักงานขับรถ', 'พขร'], location: ['สถานที่'], lat: ['ละติจูด', 'lat'], lon: ['ลองจิจูด', 'lon'],
+      map: ['แผนที่'], link: ['ลิงก์หลักฐาน'],
+    },
+    build: (get) => ({
+      at: thaiTime(get('time')) ?? thaiTime(get('received')),
+      device: get('device'),
+      type: get('type'),
+      group: get('group'),
+      driver: blank(get('driver')),
+      location: get('location'),
+      lat: num(get('lat')), lon: num(get('lon')),
+      mapUrl: url(get('map')),
+      link: url(get('link')),
     }),
   },
   ob: {

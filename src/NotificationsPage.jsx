@@ -174,6 +174,7 @@ export const NOTIF_TABS = [
   { id: 'pms', href: '#/notifications' },
   { id: 'pms2', href: '#/notifications/pms2' },
   { id: 'ngv', href: '#/notifications/ngv' },
+  { id: 'ngv2', href: '#/notifications/ngv2' },
   { id: 'ob', href: '#/notifications/ob' },
   { id: 'ttt', href: '#/notifications/ttt' },
   { id: 'bsrc', href: '#/notifications/bsrc' },
