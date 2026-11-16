@@ -241,6 +241,8 @@ export const SOURCES = {
   },
   bsrc: {
     label: 'BSRC COC',
+    group: 'bsrc',
+    sub: 'เครื่อง 1',
     url: 'https://script.google.com/macros/s/AKfycbxLFR1aBglVpt49S33Vsk_H_iF68ePKfjq3UDUdhWEOAaIsEJpG_TMC90Mvs_3uTzm3/exec',
     prefix: 'bsrc_',
     fields: {
@@ -263,6 +265,30 @@ export const SOURCES = {
       video: url(get('video')),
       link: url(get('other')),
       linkLabel: 'วิดีโออื่น',
+    }),
+  },
+  bsrc2: {
+    label: 'BSRC COC 2',
+    group: 'bsrc', // the same alerts, logged by the second (24-hour) machine into its own sheet
+    sub: 'เครื่อง 2',
+    url: 'https://script.google.com/macros/s/AKfycbx7hgiz_BKEF-m2lfdGmV1LyYOt0-5dWXwgu8IbQzqFecrHnMDw3hj9UGcIBD0Bcqfi/exec?key=cf36d3977ad27f99516ca7619dac3d7e',
+    prefix: 'bsrc2_',
+    fields: {
+      id: ['message_id'], time: ['เวลาเกิดเหตุ'], received: ['เวลาข้อความ'],
+      device: ['ชื่ออุปกรณ์', 'ชื่อรถ'], type: ['ประเภทสัญญาณเตือน', 'ประเภท'], group: ['กลุ่มรถ', 'ชื่อกลุ่มรถ'],
+      driver: ['พนักงานขับรถ', 'พขร'], location: ['สถานที่'], lat: ['ละติจูด', 'lat'], lon: ['ลองจิจูด', 'lon'],
+      map: ['แผนที่'], video: ['ลิงก์หลักฐาน', 'วิดีโอ mp4'],
+    },
+    build: (get) => ({
+      at: thaiTime(get('time')) ?? thaiTime(get('received')),
+      device: get('device'),
+      type: get('type'),
+      group: get('group'),
+      driver: blank(get('driver').replace(/\s+/g, ' ')),
+      location: get('location'),
+      lat: num(get('lat')), lon: num(get('lon')),
+      mapUrl: url(get('map')),
+      video: url(get('video')),
     }),
   },
 }

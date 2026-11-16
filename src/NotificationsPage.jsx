@@ -180,6 +180,7 @@ export const NOTIF_TABS = [
   { id: 'ttt', href: '#/notifications/ttt' },
   { id: 'ttt2', href: '#/notifications/ttt2' },
   { id: 'bsrc', href: '#/notifications/bsrc' },
+  { id: 'bsrc2', href: '#/notifications/bsrc2' },
 ]
 
 export default function NotificationsPage({ user, source = 'pms' }) {
