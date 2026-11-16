@@ -139,6 +139,8 @@ export const SOURCES = {
   },
   ob: {
     label: 'OB',
+    group: 'ob',
+    sub: 'เครื่อง 1',
     url: 'https://script.google.com/macros/s/AKfycbwvRpEnb_BhS8klzmtyegScU5knjkFTldWrwHjV0JXJIJIh9gQMRTicy7wVtJ43GN5pzA/exec',
     prefix: 'ob_',
     fields: {
@@ -151,6 +153,30 @@ export const SOURCES = {
       device: get('device'),
       type: get('type') || get('status'),
       sub: get('status'),
+      group: get('group'),
+      speed: num(get('speed')),
+      location: get('location'),
+      lat: num(get('lat')), lon: num(get('lon')),
+      mapUrl: url(get('map')),
+      video: url(get('video')),
+    }),
+  },
+  ob2: {
+    label: 'OB 2',
+    group: 'ob', // the same alerts, logged by the second (24-hour) machine into its own sheet
+    sub: 'เครื่อง 2',
+    url: 'https://script.google.com/macros/s/AKfycby_ELUU1hCoba2uL-A4b64J4OxBs6X5E6_HaOu-6vJg_DhrNX5jMUWFgoMJUSgxCh1Kxw/exec?key=e825a6bcf83b639d92dc3157197cfdfc',
+    prefix: 'ob2_',
+    fields: {
+      id: ['message_id'], time: ['เวลาเกิดเหตุ'], received: ['เวลาข้อความ'],
+      device: ['ชื่ออุปกรณ์', 'ชื่อรถ'], type: ['ประเภทสัญญาณเตือน', 'ประเภท'], group: ['กลุ่มรถ', 'ชื่อกลุ่ม'],
+      speed: ['ความเร็ว (กม./ชม.)', 'ความเร็ว'], location: ['สถานที่'], lat: ['ละติจูด', 'lat'], lon: ['ลองจิจูด', 'lon'],
+      map: ['แผนที่'], video: ['ลิงก์หลักฐาน', 'วิดีโอ'],
+    },
+    build: (get) => ({
+      at: thaiTime(get('time')) ?? thaiTime(get('received')),
+      device: get('device'),
+      type: get('type'),
       group: get('group'),
       speed: num(get('speed')),
       location: get('location'),

@@ -29,7 +29,7 @@ const NOTIF_SHEET_NAME = '' // tab name, e.g. 'VSS Alerts'; '' or a missing tab 
 const NOTIF_ID_HEADER = 'message_id'
 const NOTIF_SOURCE = 'notif-page' // must match the website's request
 // The 4 columns written: status, note, who, when. Existing columns are reused; missing ones are added at the end.
-// เครื่อง 2 (PMS: แท็บ SCC Evidence, NGV: แท็บ CCTV NGV Monitoring) มีคอลัมน์ตรวจสอบอยู่แล้ว ให้ใช้บรรทัดนี้แทน:
+// เครื่อง 2 (PMS: แท็บ SCC Evidence, NGV: แท็บ CCTV NGV Monitoring, OB: แท็บ SCA OB) มีคอลัมน์ตรวจสอบอยู่แล้ว ให้ใช้บรรทัดนี้แทน:
 //   const NOTIF_COLUMNS = ['ผลตรวจสอบ', 'หมายเหตุการจัดการ', 'ผู้ตรวจสอบ', 'เวลาตรวจสอบ']
 const NOTIF_COLUMNS = ['สถานะการจัดการ', 'หมายเหตุการจัดการ', 'ผู้ดำเนินการ', 'เวลาดำเนินการ']
 
