@@ -31,7 +31,6 @@ const NOTIF_SOURCE = 'notif-page' // must match the website's request
 // The 4 columns written: status, note, who, when. Missing ones are added at the end of the header row.
 // เครื่อง 2 (PMS: แท็บ SCC Evidence, NGV: CCTV NGV Monitoring, OB: SCA OB) ใช้ค่านี้เหมือนกัน
 // ห้ามเปลี่ยนเป็น ผลตรวจสอบ/ผู้ตรวจสอบ/เวลาตรวจสอบ เพราะจะเขียนทับผลที่คนกรอกไว้ ให้ตั้งแค่ NOTIF_SHEET_NAME
-const NOTIF_COLUMNS = ['ผลตรวจสอบ', 'หมายเหตุการจัดการ', 'ผู้ตรวจสอบ', 'เวลาตรวจสอบ']
 const NOTIF_COLUMNS = ['สถานะการจัดการ', 'หมายเหตุการจัดการ', 'ผู้ดำเนินการ', 'เวลาดำเนินการ']
 
 function handleNotifPost(e) {
