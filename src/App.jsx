@@ -30,6 +30,7 @@ const ROUTES = {
   '/dashboard/behavior': BehaviorDashboard,
   '/maps': MapsPage,
   '/notifications': NotificationsPage,
+  '/notifications/pms2': (props) => <NotificationsPage {...props} source="pms2" />,
   '/notifications/ngv': (props) => <NotificationsPage {...props} source="ngv" />,
   '/notifications/ob': (props) => <NotificationsPage {...props} source="ob" />,
   '/notifications/ttt': (props) => <NotificationsPage {...props} source="ttt" />,

@@ -46,6 +46,8 @@ const url = (s) => (/^https?:\/\//i.test(s) ? s : '')
 export const SOURCES = {
   pms: {
     label: 'PMS',
+    group: 'pms',
+    sub: 'เครื่อง 1',
     url: 'https://script.google.com/macros/s/AKfycbyrSPxsAz9pY1Rswe1tIsvyg3sAq3Yh3wbWg2RmZCe6xMeTh4YiakBFWSBDWpgOYAuvIg/exec',
     prefix: '', // PMS was first; its ids stay as they are so saved statuses keep working
     fields: {
@@ -61,6 +63,29 @@ export const SOURCES = {
       sub: get('typeEn'),
       satellites: num(get('satellites')),
       lat: num(get('lat')), lon: num(get('lon')),
+      link: url(get('link')),
+    }),
+  },
+  pms2: {
+    label: 'PMS 2',
+    group: 'pms', // a sub-tab under PMS: the same alerts, logged by the second (24-hour) machine into its own sheet
+    sub: 'เครื่อง 2',
+    url: 'https://script.google.com/macros/s/AKfycby2v9rxFWKJUB3t0Q8q75k0Cehb88o-E4cTx7BSSehs1LU6BNKditO3ko-3yRejDgVL/exec?key=2ece0a1e4e69f0c8ddc282d10dfdf1b0',
+    prefix: 'pms2_',
+    fields: {
+      id: ['message_id'], alarm: ['เวลาเกิดเหตุ'], sent: ['เวลาแจ้งเตือน'], received: ['เวลาข้อความ'],
+      device: ['ชื่ออุปกรณ์'], deviceNo: ['หมายเลขอุปกรณ์'], typeTh: ['ประเภทสัญญาณเตือน'], typeEn: ['ประเภท (EN)'],
+      detail: ['รายละเอียด'], lat: ['ละติจูด', 'lat'], lon: ['ลองจิจูด', 'lon'], map: ['แผนที่'], link: ['ลิงก์หลักฐาน', 'ลิงก์'],
+    },
+    build: (get) => ({
+      at: thaiTime(get('alarm')) ?? thaiTime(get('sent')) ?? thaiTime(get('received')),
+      device: get('device'),
+      deviceNo: get('deviceNo'),
+      type: get('typeTh') || get('typeEn'),
+      sub: get('typeEn'),
+      satellites: num(get('detail').match(/satellites\s*:\s*(\d+)/i)?.[1]),
+      lat: num(get('lat')), lon: num(get('lon')),
+      mapUrl: url(get('map')),
       link: url(get('link')),
     }),
   },
@@ -195,7 +220,7 @@ export function toNotifs(rows, src) {
 }
 
 export async function loadNotifs(src) {
-  const res = await fetch(`${src.url}?limit=${NOTIF_LIMIT}`, { cache: 'no-store' })
+  const res = await fetch(`${src.url}${src.url.includes('?') ? '&' : '?'}limit=${NOTIF_LIMIT}`, { cache: 'no-store' })
   if (!res.ok) throw new Error(`Could not load notifications (HTTP ${res.status}).`)
   const text = await res.text()
   if (/^\s*<(!doctype|html)/i.test(text)) throw new Error('The link returned a web page, not data. Is the script deployed with access "Anyone"?')

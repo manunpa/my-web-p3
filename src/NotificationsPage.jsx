@@ -172,6 +172,7 @@ function NotifItem({ src, n, a, i, isNew, now, user, onError }) {
 // The feeds, shown as a switch at the top. Each one has its own route in App.jsx.
 export const NOTIF_TABS = [
   { id: 'pms', href: '#/notifications' },
+  { id: 'pms2', href: '#/notifications/pms2' },
   { id: 'ngv', href: '#/notifications/ngv' },
   { id: 'ob', href: '#/notifications/ob' },
   { id: 'ttt', href: '#/notifications/ttt' },
@@ -323,13 +324,26 @@ export default function NotificationsPage({ user, source = 'pms' }) {
             <RefreshCw size={16} className={busy ? 'spin' : ''} />
           </button>
           <nav className="seg-ctl" aria-label="เลือกชุดแจ้งเตือน">
-            {NOTIF_TABS.map((t) => (
-              <a key={t.id} href={t.href} className={`seg-link${t.id === source ? ' on' : ''}`}
-                aria-current={t.id === source ? 'page' : undefined}>
-                <Bell size={13} /> {SOURCES[t.id].label}
-              </a>
-            ))}
+            {NOTIF_TABS.filter((t) => !SOURCES[t.id].group || SOURCES[t.id].group === t.id).map((t) => {
+              const on = (src.group || source) === t.id
+              return (
+                <a key={t.id} href={t.href} className={`seg-link${on ? ' on' : ''}`}
+                  aria-current={on ? 'page' : undefined}>
+                  <Bell size={13} /> {SOURCES[t.id].label}
+                </a>
+              )
+            })}
           </nav>
+          {src.group && (
+            <nav className="seg-ctl small" aria-label={`เลือกเครื่องของ ${SOURCES[src.group].label}`}>
+              {NOTIF_TABS.filter((t) => SOURCES[t.id].group === src.group).map((t) => (
+                <a key={t.id} href={t.href} className={`seg-link${t.id === source ? ' on' : ''}`}
+                  aria-current={t.id === source ? 'page' : undefined}>
+                  {SOURCES[t.id].sub}
+                </a>
+              ))}
+            </nav>
+          )}
         </header>
 
         {state.error && state.status === 'ready' && (
@@ -362,7 +376,7 @@ export default function NotificationsPage({ user, source = 'pms' }) {
               <div className="tools">
                 <label className="f search">
                   <Search size={15} />
-                  <input type="search" placeholder={source !== 'pms' ? 'ค้นหา ทะเบียนรถ กลุ่มรถ พขร. สถานที่ ประเภท หมายเหตุ…' : 'ค้นหา ชื่ออุปกรณ์ หมายเลข ประเภท หมายเหตุ…'}
+                  <input type="search" placeholder={src.group !== 'pms' ? 'ค้นหา ทะเบียนรถ กลุ่มรถ พขร. สถานที่ ประเภท หมายเหตุ…' : 'ค้นหา ชื่ออุปกรณ์ หมายเลข ประเภท หมายเหตุ…'}
                     value={q} onChange={(e) => setQ(e.target.value)} aria-label="ค้นหาแจ้งเตือน" />
                 </label>
                 <label className="f unit-pick">

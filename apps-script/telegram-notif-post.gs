@@ -16,7 +16,7 @@
  *
  * สิ่งที่ทำ
  *  - หาแท็บแรกที่แถวหัวคอลัมน์มี "message_id" (หรือกำหนด NOTIF_SHEET_NAME เอง)
- *  - ใช้ไฟล์เดียวกันนี้ได้ทั้งสคริปต์ PMS และ NGV
+ *  - ใช้ไฟล์เดียวกันนี้ได้ทุกสคริปต์ (PMS เครื่อง 1/2, NGV, OB, TTT, BSRC) ดู NOTIF_COLUMNS สำหรับเครื่อง 2
  *  - เพิ่มคอลัมน์ท้ายตารางให้อัตโนมัติถ้ายังไม่มี: สถานะการจัดการ, หมายเหตุการจัดการ, ผู้ดำเนินการ, เวลาดำเนินการ
  *  - หาแถวที่ message_id ตรงกัน แล้วเขียนทับ 4 ช่องนั้น
  *
@@ -28,6 +28,9 @@
 const NOTIF_SHEET_NAME = '' // tab name, e.g. 'VSS Alerts'; '' or a missing tab = use the first tab with a message_id column
 const NOTIF_ID_HEADER = 'message_id'
 const NOTIF_SOURCE = 'notif-page' // must match the website's request
+// The 4 columns written: status, note, who, when. Existing columns are reused; missing ones are added at the end.
+// PMS เครื่อง 2 (ชีต SCC Evidence) มีคอลัมน์ตรวจสอบอยู่แล้ว ให้ใช้บรรทัดนี้แทน:
+//   const NOTIF_COLUMNS = ['ผลตรวจสอบ', 'หมายเหตุการจัดการ', 'ผู้ตรวจสอบ', 'เวลาตรวจสอบ']
 const NOTIF_COLUMNS = ['สถานะการจัดการ', 'หมายเหตุการจัดการ', 'ผู้ดำเนินการ', 'เวลาดำเนินการ']
 
 function handleNotifPost(e) {
