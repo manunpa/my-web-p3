@@ -178,6 +178,7 @@ export const NOTIF_TABS = [
   { id: 'ob', href: '#/notifications/ob' },
   { id: 'ob2', href: '#/notifications/ob2' },
   { id: 'ttt', href: '#/notifications/ttt' },
+  { id: 'ttt2', href: '#/notifications/ttt2' },
   { id: 'bsrc', href: '#/notifications/bsrc' },
 ]
 

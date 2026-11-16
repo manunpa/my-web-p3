@@ -187,6 +187,8 @@ export const SOURCES = {
   },
   ttt: {
     label: 'TTT',
+    group: 'ttt',
+    sub: 'เครื่อง 1',
     url: 'https://script.google.com/macros/s/AKfycbxTiiT_N_xfUx0DkoVcYSk7ee8XHW25CimN48z-TRARi0zoHG7wz-Qn35hs-OmKbUplwQ/exec',
     prefix: 'ttt_',
     fields: {
@@ -207,6 +209,32 @@ export const SOURCES = {
       lat: num(get('lat')), lon: num(get('lon')),
       mapUrl: url(get('map')),
       video: url(get('video')),
+      link: url(get('dtc')),
+      linkLabel: 'วิดีโอ DTC',
+    }),
+  },
+  ttt2: {
+    label: 'TTT 2',
+    group: 'ttt', // the same alerts, logged by the second (24-hour) machine into its own sheet
+    sub: 'เครื่อง 2',
+    url: 'https://script.google.com/macros/s/AKfycbypAF8-VR3sfHgyvhW8pkrNJpjw7WWEbI5DU4sOv_Xi-IMMFLj9KMKaFySO4UYcrQNn/exec?key=d5a47996fd182ebf52971fd8b7403fd1',
+    prefix: 'ttt2_',
+    fields: {
+      id: ['message_id'], time: ['เวลาเกิดเหตุ'], received: ['เวลาข้อความ'],
+      device: ['ชื่ออุปกรณ์', 'ชื่อรถ'], type: ['ประเภทสัญญาณเตือน', 'ประเภท'], group: ['กลุ่มรถ', 'ชื่อกลุ่มรถ'],
+      driver: ['พนักงานขับรถ', 'พขร'], speed: ['ความเร็ว (กม./ชม.)', 'ความเร็ว'], area: ['ชื่อพื้นที่'],
+      location: ['สถานที่'], lat: ['ละติจูด', 'lat'], lon: ['ลองจิจูด', 'lon'], map: ['แผนที่'], dtc: ['ลิงก์หลักฐาน'],
+    },
+    build: (get) => ({
+      at: thaiTime(get('time')) ?? thaiTime(get('received')),
+      device: get('device'),
+      type: get('type'),
+      group: get('group'),
+      driver: blank(get('driver').replace(/\s+/g, ' ')),
+      speed: num(get('speed')),
+      location: [get('area'), get('location')].filter(Boolean).join(' · '),
+      lat: num(get('lat')), lon: num(get('lon')),
+      mapUrl: url(get('map')),
       link: url(get('dtc')),
       linkLabel: 'วิดีโอ DTC',
     }),
