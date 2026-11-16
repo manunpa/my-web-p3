@@ -208,7 +208,7 @@ export default function LoginV7({ notice, onProfileUpdated }) {
         </button>
 
         {msg && (
-          <p role="alert" style={{ margin: '12px 0 0', fontSize: 12, color: msg.type === 'err' ? '#fca5a5' : '#86efac' }}>
+          <p role="alert" style={{ margin: '12px 0 0', fontSize: 12, color: msg.type === 'err' ? 'var(--err)' : 'var(--ok)' }}>
             {msg.text}
           </p>
         )}

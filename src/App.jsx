@@ -10,6 +10,7 @@ import AdasDashboard from './AdasDashboard'
 import BehaviorDashboard from './BehaviorDashboard'
 import NotificationsPage from './NotificationsPage'
 import SessionTimer from './SessionTimer'
+import ThemeToggle from './ThemeToggle'
 import PageErrorBoundary from './PageErrorBoundary'
 import { saveUser } from './saveUser'
 
@@ -45,6 +46,15 @@ const ROUTES = {
 const currentRoute = () => location.hash.replace(/^#/, '') || '/'
 
 export default function App() {
+  return (
+    <>
+      <ThemeToggle />
+      <Screen />
+    </>
+  )
+}
+
+function Screen() {
   const [user, setUser] = useState(undefined) // undefined = still checking
   const [route, setRoute] = useState(currentRoute)
   const [verified, setVerified] = useState(null) // "uid:route" that passed the check

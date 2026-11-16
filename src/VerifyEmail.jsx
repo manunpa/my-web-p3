@@ -67,7 +67,7 @@ export default function VerifyEmail({ user, onVerified, onSignOut }) {
   return (
     <div className="stage" ref={stage}>
       <div className="card in" ref={card}>
-        <MailCheck size={36} color="#facc15" />
+        <MailCheck size={36} color="var(--gold-text)" />
         <h1>Verify your <b>Email</b></h1>
         <p className="sub">
           We sent a link to <b>{user.email}</b>. Open it to activate your account, then come back here.
@@ -79,7 +79,7 @@ export default function VerifyEmail({ user, onVerified, onSignOut }) {
         </button>
 
         {msg && (
-          <p role="alert" style={{ margin: '12px 0 0', fontSize: 12, color: msg.type === 'err' ? '#fca5a5' : '#86efac' }}>
+          <p role="alert" style={{ margin: '12px 0 0', fontSize: 12, color: msg.type === 'err' ? 'var(--err)' : 'var(--ok)' }}>
             {msg.text}
           </p>
         )}
