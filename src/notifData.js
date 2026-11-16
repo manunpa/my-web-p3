@@ -377,10 +377,11 @@ export async function saveActions(list, user, status, notes) {
 
 /* ---------- copy to the Google Sheet row of each alert (apps-script/telegram-notif-post.gs) ---------- */
 
+// The column the script writes the status label into (NOTIF_COLUMNS[0]).
+export const SHEET_STATUS_COL = 'สถานะการจัดการ'
+
 // text/plain avoids a CORS preflight, which Apps Script does not answer.
-export async function sendToSheet(src, list, user, status, notes) {
-  const by = user.displayName || user.email || ''
-  const items = list.map((n) => ({ id: n.id, status: STATUSES[status]?.label ?? status, note: notes(n), by }))
+async function postToSheet(src, items) {
   const res = await fetch(src.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -390,8 +391,80 @@ export async function sendToSheet(src, list, user, status, notes) {
   const text = await res.text()
   if (/^\s*<(!doctype|html)/i.test(text)) throw new Error('สคริปต์ตอบกลับเป็นหน้าเว็บ ยังไม่ได้ Deploy เวอร์ชันใหม่?')
   const json = JSON.parse(text)
-  if (json?.error === 'unauthorized') throw new Error(`สคริปต์ ${src.label} ยังไม่ได้เพิ่ม handleNotifPost ใน doPost หรือยังไม่ได้ Deploy เวอร์ชันใหม่`)
+  if (json?.error === 'unauthorized' || json?.error === 'bad secret') throw new Error(`สคริปต์ ${src.label} ยังไม่ได้เพิ่ม handleNotifPost ใน doPost หรือยังไม่ได้ Deploy เวอร์ชันใหม่`)
   if (json?.error) throw new Error(json.error)
-  if (json?.notFound?.length) throw new Error(`ไม่พบ message_id ${json.notFound.slice(0, 5).join(', ')} ในชีต`)
   return json
+}
+
+// The script handles one request at a time (script lock), so rapid clicks used to pile up and time out.
+// Each feed gets one queue: clicks within FLUSH_MS go out as a single request, one request in flight
+// at a time, and a failed batch is retried with backoff before it is reported.
+const FLUSH_MS = 1200
+const RETRY_MS = [3000, 10000, 30000]
+const queues = new Map()
+
+function queueFor(src) {
+  let q = queues.get(src.url)
+  if (!q) {
+    q = { pending: new Map(), busy: false, timer: null, tries: 0, onError: null }
+    queues.set(src.url, q)
+  }
+  return q
+}
+
+function schedule(src, q, ms) {
+  clearTimeout(q.timer)
+  q.timer = setTimeout(() => flush(src, q), ms)
+}
+
+async function flush(src, q) {
+  q.timer = null
+  if (q.busy || !q.pending.size) return
+  q.busy = true
+  const batch = [...q.pending.values()]
+  q.pending.clear()
+  try {
+    await postToSheet(src, batch)
+    q.tries = 0
+  } catch (err) {
+    for (const it of batch) if (!q.pending.has(it.id)) q.pending.set(it.id, it) // a newer click wins
+    if (q.tries < RETRY_MS.length) {
+      q.busy = false
+      schedule(src, q, RETRY_MS[q.tries++])
+      return
+    }
+    q.tries = 0
+    q.pending.clear()
+    q.onError?.(err)
+  }
+  q.busy = false
+  if (q.pending.size) schedule(src, q, FLUSH_MS)
+}
+
+// items: [{ id, status (label), note, by }]. onError runs only after the retries have failed.
+export function queueSheet(src, items, onError) {
+  const q = queueFor(src)
+  if (onError) q.onError = onError
+  for (const it of items) q.pending.set(it.id, it)
+  if (!q.busy && !q.timer) schedule(src, q, FLUSH_MS) // a send at most FLUSH_MS after the first click, even while clicking on
+}
+
+export function sendToSheet(src, list, user, status, notes, onError) {
+  const by = user.displayName || user.email || ''
+  queueSheet(src, list.map((n) => ({ id: n.id, status: STATUSES[status]?.label ?? status, note: notes(n), by })), onError)
+}
+
+// Alerts whose status in Firestore is not in their sheet row yet (e.g. a request that failed earlier).
+export function sheetMismatches(items, actions) {
+  const out = []
+  for (const n of items) {
+    const a = actions.get(n.key)
+    if (!a || !STATUSES[a.status]) continue
+    const inSheet = String(n.raw?.[SHEET_STATUS_COL] ?? '').trim()
+    const label = STATUSES[a.status].label
+    if (a.status === 'new' ? inSheet && inSheet !== label : inSheet !== label) {
+      out.push({ id: n.id, status: label, note: a.note || '', by: a.byName || '' })
+    }
+  }
+  return out
 }

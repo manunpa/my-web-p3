@@ -4,7 +4,7 @@ import {
   Filter, Gauge, MapPin, RefreshCw, Route, Satellite, ScanEye, Search, Siren, Smartphone, StickyNote, User, Users, Video, X,
 } from 'lucide-react'
 import {
-  loadNotifs, watchActions, saveAction, saveActions, sendToSheet, SOURCES, STATUSES, NOTIF_REFRESH_MS,
+  loadNotifs, watchActions, saveAction, saveActions, sendToSheet, queueSheet, sheetMismatches, SOURCES, STATUSES, NOTIF_REFRESH_MS,
 } from './notifData'
 import { Panel, Kpi, Empty, nf } from './charts'
 import { DAY, dDay, dTime, hm, startOfDay, usePointerGlow } from './dashShared'
@@ -73,7 +73,7 @@ function NotifItem({ src, n, a, i, isNew, now, user, onError }) {
     try {
       await saveAction(n, user, nextStatus, nextNote)
       // The sheet copy runs in the background; the page already shows the new status from Firestore.
-      sendToSheet(src, [n], user, nextStatus, () => nextNote).catch((err) => onError(sheetError(err)))
+      sendToSheet(src, [n], user, nextStatus, () => nextNote, (err) => onError(sheetError(err)))
       return true
     } catch (err) {
       onError(dbError(err))
@@ -233,6 +233,17 @@ export default function NotificationsPage({ user, source = 'pms2' }) {
     return watchActions(new Date(since), (m) => { setActions(m); setDbErr(null) }, (err) => setDbErr(dbError(err)))
   }, [since])
 
+  // Self-repair: resend statuses that never reached the sheet. Each id+status is tried once per visit;
+  // the sheet is re-read every minute, so a successful write stops it showing up here.
+  const resent = useRef(new Set())
+  useEffect(() => {
+    if (state.status !== 'ready' || !actions.size) return
+    const todo = sheetMismatches(state.items, actions).filter((it) => !resent.current.has(`${it.id}:${it.status}`))
+    if (!todo.length) return
+    todo.forEach((it) => resent.current.add(`${it.id}:${it.status}`))
+    queueSheet(src, todo, (err) => setDbErr(sheetError(err)))
+  }, [state, actions, src])
+
   const statusOf = useCallback((n) => {
     const s = actions.get(n.key)?.status
     return s && STATUSES[s] ? s : 'new'
@@ -297,7 +308,7 @@ export default function NotificationsPage({ user, source = 'pms2' }) {
     try {
       const notes = (n) => actions.get(n.key)?.note || ''
       await saveActions(pendingShown, user, 'ack', notes)
-      sendToSheet(src, pendingShown, user, 'ack', notes).catch((err) => setDbErr(sheetError(err)))
+      sendToSheet(src, pendingShown, user, 'ack', notes, (err) => setDbErr(sheetError(err)))
     } catch (err) {
       setDbErr(dbError(err))
     } finally {
