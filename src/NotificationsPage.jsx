@@ -269,7 +269,7 @@ export default function NotificationsPage({ user, source = 'pms2' }) {
     const s = q.trim().toLowerCase()
     return items.filter((n) => {
       const st = statusOf(n)
-      if (show === 'open' ? st !== 'new' && st !== 'ack' : show !== 'all' && st !== show) return false
+      if (show === 'open' ? st === 'done' : show !== 'all' && st !== show) return false // false alarms stay in view, marked
       if (type && n.type !== type) return false
       if (!s) return true
       const note = actions.get(n.key)?.note || ''
@@ -306,7 +306,7 @@ export default function NotificationsPage({ user, source = 'pms2' }) {
   }
 
   const chips = [
-    { id: 'open', label: 'ต้องติดตาม', n: counts.new + counts.ack },
+    { id: 'open', label: 'ต้องติดตาม', n: counts.new + counts.ack + counts.false },
     { id: 'new', label: 'ใหม่', n: counts.new },
     { id: 'ack', label: 'รับทราบ', n: counts.ack },
     { id: 'done', label: 'ดำเนินการแล้ว', n: counts.done },
