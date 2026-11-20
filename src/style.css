@@ -100,6 +100,8 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .tick{fill:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
 .rev-line{fill:none;stroke:var(--gold);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1.6s cubic-bezier(.3,.7,.2,1) forwards;filter:drop-shadow(0 4px 10px rgba(250,204,21,.45))}
 .area-in{animation:fadein 1.2s .4s both}
+.line-dot{fill:var(--gold);stroke:var(--bg);stroke-width:1.5;animation:fadein .4s both}
+.line-val{fill:var(--text);font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round;animation:fadein .4s both;pointer-events:none}
 .cross line{stroke:rgba(255,255,255,.35);stroke-width:1;stroke-dasharray:3 3}
 .cross circle{fill:var(--gold);stroke:#17171a;stroke-width:2}
 .tip{position:absolute;z-index:5;transform:translate(-50%,calc(-100% - 12px));display:flex;flex-direction:column;gap:2px;padding:8px 12px;border-radius:10px;background:rgba(10,10,12,.92);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.5);font-size:11px;color:var(--muted);white-space:nowrap;pointer-events:none}

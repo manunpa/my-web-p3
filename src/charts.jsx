@@ -144,20 +144,52 @@ export function Kpi({ label, icon: Icon, value, format, delta = null, upIsGood =
 
 /* ---------- line chart with crosshair + tooltip ---------- */
 
+// Monotone cubic (Fritsch–Carlson): smooth curve that never overshoots the data (no dips below 0).
+function smoothPath(pts) {
+  const n = pts.length
+  if (!n) return ''
+  const f = (v) => v.toFixed(1)
+  if (n < 3) return pts.map(([px, py], i) => `${i ? 'L' : 'M'}${f(px)},${f(py)}`).join('')
+  const dx = [], sl = []
+  for (let i = 0; i < n - 1; i++) {
+    dx[i] = pts[i + 1][0] - pts[i][0]
+    sl[i] = (pts[i + 1][1] - pts[i][1]) / dx[i]
+  }
+  const t = [sl[0]]
+  for (let i = 1; i < n - 1; i++) {
+    if (sl[i - 1] * sl[i] <= 0) t[i] = 0
+    else {
+      const w1 = 2 * dx[i] + dx[i - 1], w2 = dx[i] + 2 * dx[i - 1]
+      t[i] = (w1 + w2) / (w1 / sl[i - 1] + w2 / sl[i])
+    }
+  }
+  t[n - 1] = sl[n - 2]
+  let d = `M${f(pts[0][0])},${f(pts[0][1])}`
+  for (let i = 0; i < n - 1; i++) {
+    const h3 = dx[i] / 3
+    d += `C${f(pts[i][0] + h3)},${f(pts[i][1] + t[i] * h3)} ${f(pts[i + 1][0] - h3)},${f(pts[i + 1][1] - t[i + 1] * h3)} ${f(pts[i + 1][0])},${f(pts[i + 1][1])}`
+  }
+  return d
+}
+
 export function LineChart({ data, animKey, format, tickFormat = (v) => compact.format(v), dateLabel, tipDate, ariaLabel, integer }) {
   const [ref, w] = useWidth()
   const [hover, setHover] = useState(null)
   const h = w > 600 ? 300 : 240
-  const m = { t: 16, r: 12, b: 30, l: 44 }
+  const m = { t: 24, r: 14, b: 30, l: 44 }
   const iw = Math.max(0, w - m.l - m.r)
   const ih = h - m.t - m.b
   const n = data.length
   const { top, ticks } = niceScale(Math.max(0, ...data.map((d) => d.value)) * 1.08, 4, integer)
   const x = (i) => m.l + (n <= 1 ? iw / 2 : (i * iw) / (n - 1))
   const y = (v) => m.t + ih - (v / top) * ih
-  const line = data.map((d, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(d.value).toFixed(1)}`).join('')
+  const line = smoothPath(data.map((d, i) => [x(i), y(d.value)]))
   const area = `${line}L${x(n - 1)},${m.t + ih}L${x(0)},${m.t + ih}Z`
   const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(iw / 76))))
+  const gap = n > 1 ? iw / (n - 1) : iw
+  const showDots = gap >= 6
+  const valEvery = Math.max(1, Math.ceil(26 / gap))
+  const showVal = (i) => i === n - 1 || (i % valEvery === 0 && n - 1 - i >= valEvery / 2)
 
   const move = (e) => {
     const r = e.currentTarget.getBoundingClientRect()
@@ -195,6 +227,16 @@ export function LineChart({ data, animKey, format, tickFormat = (v) => compact.f
           <g key={animKey}>
             <path d={area} fill="url(#line-fill)" className="area-in" />
             <path d={line} className="rev-line" pathLength="1" />
+            {showDots && data.map((d, i) => (
+              <circle key={i} cx={x(i)} cy={y(d.value)} r="3" className="line-dot"
+                style={{ animationDelay: `${0.3 + (i / Math.max(1, n - 1)) * 1.1}s` }} />
+            ))}
+            {data.map((d, i) => showVal(i) && (
+              <text key={i} x={x(i)} y={y(d.value) - 9} textAnchor="middle" className="line-val"
+                style={{ animationDelay: `${0.3 + (i / Math.max(1, n - 1)) * 1.1}s`, opacity: hover === i ? 0 : undefined }}>
+                {nf.format(d.value)}
+              </text>
+            ))}
           </g>
           {hover !== null && (
             <g className="cross">
