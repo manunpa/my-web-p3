@@ -119,7 +119,6 @@ export function pinPopupHtml(p) {
   return `<div class="mpop">
     <div class="mpop-sup">พิกัดที่ค้นหา</div>
     <code>${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</code>
-    <a href="${googleMapsLink(p)}" target="_blank" rel="noopener">เปิดใน Google Maps ↗</a>
   </div>`
 }
 

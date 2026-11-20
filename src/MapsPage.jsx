@@ -216,9 +216,6 @@ export default function MapsPage() {
                 <button type="button" className="more" onClick={() => copy(pin)}>
                   {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'คัดลอกแล้ว' : 'คัดลอกพิกัด'}
                 </button>
-                <a className="more" href={googleMapsLink(pin)} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink size={14} /> Google Maps
-                </a>
               </div>
             </div>
           )}
