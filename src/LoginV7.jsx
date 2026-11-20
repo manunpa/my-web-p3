@@ -147,7 +147,7 @@ export default function LoginV7({ notice, onProfileUpdated }) {
           </>
         ) : (
           <>
-            <h1><b>SCC</b></h1>
+            <h1>SCC <b>Fleet</b></h1>
             <p className="sub">Enter your credentials to access your secure account.</p>
           </>
         )}
