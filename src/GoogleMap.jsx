@@ -211,7 +211,7 @@ export default function GoogleMap({ points, colorOf, selected, onSelect, type, v
     map.current.panTo(pos)
     if (map.current.getZoom() < 16) map.current.setZoom(17)
     info.current.setContent(popupHtml(selected, colorOf(selected.supplier)))
-    info.current.open({ map: map.current, anchor: highlight.current })
+    info.current.open({ map: map.current, anchor: highlight.current, shouldFocus: false })
   }, [ready, selected, colorOf]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // searched coordinate: red pin + info window
@@ -228,13 +228,13 @@ export default function GoogleMap({ points, colorOf, selected, onSelect, type, v
     })
     pinMk.current.addListener('click', () => {
       info.current.setContent(pinPopupHtml(pin))
-      info.current.open({ map: map.current, anchor: pinMk.current })
+      info.current.open({ map: map.current, anchor: pinMk.current, shouldFocus: false })
     })
     if (!active) return
     map.current.panTo(pos)
     if (map.current.getZoom() < 15) map.current.setZoom(15)
     info.current.setContent(pinPopupHtml(pin))
-    info.current.open({ map: map.current, anchor: pinMk.current })
+    info.current.open({ map: map.current, anchor: pinMk.current, shouldFocus: false })
   }, [ready, pin]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
