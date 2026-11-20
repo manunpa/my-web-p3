@@ -3,7 +3,7 @@ import L from './leafletGlobal'
 import 'leaflet.markercluster'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
-import { popupHtml } from './mapsData'
+import { popupHtml, pinPopupHtml, PIN_SVG } from './mapsData'
 
 const TILES = {
   road: {
@@ -33,13 +33,14 @@ const clusterIcon = (cluster) => {
 
 // points: visible points. colorOf(supplier). selected: point or null. onSelect(point).
 // view: { lat, lng, zoom } to start from. onView(view, bounds) on every move.
-export default function LeafletMap({ points, colorOf, selected, onSelect, type, view, onView, fitKey, active }) {
+export default function LeafletMap({ points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin }) {
   const box = useRef(null)
   const map = useRef(null)
   const tiles = useRef(null)
   const cluster = useRef(null)
   const markers = useRef(new WeakMap()) // point object -> marker
   const highlight = useRef(null)
+  const pinMk = useRef(null)
   const cb = useRef({ onSelect, onView, active })
   cb.current = { onSelect, onView, active }
 
@@ -128,6 +129,23 @@ export default function LeafletMap({ points, colorOf, selected, onSelect, type, 
     const t = setTimeout(() => highlight.current?.openPopup(), 950)
     return () => clearTimeout(t)
   }, [selected, colorOf])
+
+  // searched coordinate: red pin + popup
+  useEffect(() => {
+    pinMk.current?.remove()
+    pinMk.current = null
+    if (!pin) return
+    const m = map.current
+    const ll = [pin.lat, pin.lng]
+    pinMk.current = L.marker(ll, {
+      zIndexOffset: 20000,
+      icon: L.divIcon({ className: 'pin-marker', html: PIN_SVG, iconSize: [30, 40], iconAnchor: [15, 39], popupAnchor: [0, -36] }),
+    }).addTo(m).bindPopup(pinPopupHtml(pin), { className: 'dark-popup' })
+    if (!cb.current.active) return
+    m.flyTo(ll, Math.max(m.getZoom(), 15), { duration: 0.9 })
+    const t = setTimeout(() => pinMk.current?.openPopup(), 950)
+    return () => clearTimeout(t)
+  }, [pin])
 
   return <div className="map-canvas" ref={box} hidden={!active} />
 }

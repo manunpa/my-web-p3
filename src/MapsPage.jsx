@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Search, RefreshCw, MapPin, Layers, Crosshair, X, Copy, Check, ExternalLink, AlertTriangle,
 } from 'lucide-react'
-import { loadGeofences, cachedGeofences, googleMapsLink, OTHER_SUPPLIER_COLOR } from './mapsData'
+import { loadGeofences, cachedGeofences, googleMapsLink, parseCoords, OTHER_SUPPLIER_COLOR } from './mapsData'
 import LeafletMap from './LeafletMap'
 import GoogleMap, { preloadGoogleMaps } from './GoogleMap'
 
@@ -60,6 +60,15 @@ export default function MapsPage() {
   const fitted = useRef(!!cachedGeofences())
   const [opened, setOpened] = useState(() => new Set([store.get('maps.engine', 'osm')]))
   const [copied, setCopied] = useState(false)
+  // Coordinates typed in the search box. Applied after a short pause (or Enter) so the map
+  // does not jump to half-typed numbers like "13.75, 1".
+  const [pin, setPin] = useState(null)
+  const typedPin = useMemo(() => parseCoords(q), [q])
+  useEffect(() => {
+    const t = setTimeout(() => setPin((p) => (p?.lat === typedPin?.lat && p?.lng === typedPin?.lng ? p : typedPin)), 700)
+    return () => clearTimeout(t)
+  }, [typedPin])
+  useEffect(() => { if (pin) setSelected(null) }, [pin])
   const view = useRef({ lat: 13.6, lng: 100.9, zoom: 6 })
 
   const load = useCallback(async () => {
@@ -95,7 +104,7 @@ export default function MapsPage() {
   const colors = useMemo(() => new Map(data.suppliers.map((s) => [s.name, s.color])), [data.suppliers])
   const colorOf = useCallback((name) => colors.get(name) ?? OTHER_SUPPLIER_COLOR, [colors])
 
-  const term = q.trim().toLowerCase()
+  const term = typedPin ? '' : q.trim().toLowerCase() // a coordinate search shows every station, nearest first
   const matches = useCallback((p) => !term || p.name.toLowerCase().includes(term) || p.supplier.toLowerCase().includes(term)
     || `${p.lat},${p.lng}`.includes(term), [term])
 
@@ -103,13 +112,16 @@ export default function MapsPage() {
   const shown = useMemo(() => data.points.filter((p) => !hidden.has(p.supplier) && matches(p)), [data.points, hidden, matches])
 
   // Points listed in the sidebar: same, optionally only inside the visible map area (nearest first).
+  // With a searched coordinate, distances are measured from it instead of the map center.
+  const origin = pin ?? (inView ? center : null)
   const listed = useMemo(() => {
-    if (!inView || !bounds) return shown
-    const inside = shown.filter((p) => p.lat >= bounds.south && p.lat <= bounds.north && p.lng >= bounds.west && p.lng <= bounds.east)
-    return center ? inside.sort((a, b) => distKm(center, a) - distKm(center, b)) : inside
-  }, [shown, inView, bounds, center])
+    const inside = inView && bounds
+      ? shown.filter((p) => p.lat >= bounds.south && p.lat <= bounds.north && p.lng >= bounds.west && p.lng <= bounds.east)
+      : shown
+    return origin ? [...inside].sort((a, b) => distKm(origin, a) - distKm(origin, b)) : inside
+  }, [shown, inView, bounds, origin])
 
-  useEffect(() => setLimit(PAGE), [q, hidden, inView])
+  useEffect(() => setLimit(PAGE), [q, hidden, inView, pin])
 
   const onView = useCallback((v, b) => { view.current = v; setBounds(b); setCenter({ lat: v.lat, lng: v.lng }) }, [])
 
@@ -120,9 +132,9 @@ export default function MapsPage() {
   })
   const only = (name) => setHidden(new Set(data.suppliers.map((s) => s.name).filter((s) => s !== name)))
 
-  const copy = async () => {
+  const copy = async (p) => {
     try {
-      await navigator.clipboard.writeText(`${selected.lat}, ${selected.lng}`)
+      await navigator.clipboard.writeText(`${p.lat}, ${p.lng}`)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch { /* clipboard blocked */ }
@@ -164,8 +176,9 @@ export default function MapsPage() {
           <div className="side-top">
             <label className="f search">
               <Search size={15} />
-              <input type="search" placeholder="ค้นหาชื่อสถานี ผู้ให้บริการ พิกัด…" value={q}
-                onChange={(e) => setQ(e.target.value)} aria-label="ค้นหาสถานี" />
+              <input type="search" placeholder="ค้นหาชื่อสถานี ผู้ให้บริการ หรือพิกัด เช่น 13.7563, 100.5018" value={q}
+                onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && setPin(typedPin)}
+                aria-label="ค้นหาสถานีหรือพิกัด" />
             </label>
             <button type="button" className="icon-btn" onClick={load} disabled={busy} title="โหลดข้อมูลใหม่" aria-label="โหลดข้อมูลใหม่">
               <RefreshCw size={16} className={busy ? 'spin' : ''} />
@@ -192,6 +205,24 @@ export default function MapsPage() {
             <Crosshair size={14} /> เฉพาะจุดในขอบเขตแผนที่ (เรียงจากใกล้กึ่งกลาง)
           </label>
 
+          {pin && !selected && (
+            <div className="picked">
+              <div className="picked-head">
+                <span className="mpop-sup"><MapPin size={13} color="#ef4444" />พิกัดที่ค้นหา</span>
+                <button type="button" className="x" onClick={() => setQ('')} aria-label="ล้างพิกัด"><X size={15} /></button>
+              </div>
+              <code>{pin.lat.toFixed(6)}, {pin.lng.toFixed(6)}</code>
+              <div className="picked-actions">
+                <button type="button" className="more" onClick={() => copy(pin)}>
+                  {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'คัดลอกแล้ว' : 'คัดลอกพิกัด'}
+                </button>
+                <a className="more" href={googleMapsLink(pin)} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink size={14} /> Google Maps
+                </a>
+              </div>
+            </div>
+          )}
+
           {selected && (
             <div className="picked">
               <div className="picked-head">
@@ -201,7 +232,7 @@ export default function MapsPage() {
               <strong>{selected.name}</strong>
               <code>{selected.lat.toFixed(6)}, {selected.lng.toFixed(6)}</code>
               <div className="picked-actions">
-                <button type="button" className="more" onClick={copy}>
+                <button type="button" className="more" onClick={() => copy(selected)}>
                   {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'คัดลอกแล้ว' : 'คัดลอกพิกัด'}
                 </button>
                 <a className="more" href={googleMapsLink(selected)} target="_blank" rel="noopener noreferrer">
@@ -212,7 +243,7 @@ export default function MapsPage() {
           )}
 
           <p className="side-count muted">
-            {data.status === 'loading' ? 'กำลังโหลดข้อมูล…' : `${nf.format(listed.length)} รายการ`}
+            {data.status === 'loading' ? 'กำลังโหลดข้อมูล…' : `${nf.format(listed.length)} รายการ${pin ? ' · เรียงจากใกล้พิกัดที่ค้นหา' : ''}`}
           </p>
 
           <ul className="plist">
@@ -223,7 +254,7 @@ export default function MapsPage() {
                   <span className="pname">{p.name}</span>
                   <span className="pmeta">
                     {p.supplier} · {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
-                    {inView && center && <> · {distKm(center, p).toFixed(1)} กม.</>}
+                    {origin && <> · {distKm(origin, p).toFixed(1)} กม.</>}
                   </span>
                 </button>
               </li>
@@ -262,11 +293,11 @@ export default function MapsPage() {
               {/* Both maps stay alive once opened, so switching back and forth is instant. */}
               {opened.has('osm') && (
                 <LeafletMap active={engine === 'osm'} points={shown} colorOf={colorOf} selected={selected}
-                  onSelect={setSelected} type={type} view={view.current} onView={onView} fitKey={fitKey} />
+                  onSelect={setSelected} type={type} view={view.current} onView={onView} fitKey={fitKey} pin={pin} />
               )}
               {opened.has('google') && (
                 <GoogleMap active={engine === 'google'} points={shown} colorOf={colorOf} selected={selected}
-                  onSelect={setSelected} type={type} view={view.current} onView={onView} fitKey={fitKey} />
+                  onSelect={setSelected} type={type} view={view.current} onView={onView} fitKey={fitKey} pin={pin} />
               )}
             </>
           )}

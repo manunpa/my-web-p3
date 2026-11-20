@@ -294,6 +294,7 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 }
 .tiles-dark{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.35)}
 .hl-marker{display:grid;place-items:center}
+.pin-marker{filter:drop-shadow(0 3px 4px rgba(0,0,0,.45))}
 .hl-marker span{width:16px;height:16px;border-radius:50%;box-shadow:0 0 0 3px #facc15,0 0 0 5px rgba(26,20,0,.8),0 0 18px 4px rgba(250,204,21,.7)}
 .hl-marker::before{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid #facc15;animation:ping 1.6s cubic-bezier(0,0,.2,1) infinite}
 @keyframes ping{75%,100%{transform:scale(2.2);opacity:0}}

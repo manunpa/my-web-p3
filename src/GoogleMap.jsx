@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Supercluster from 'supercluster'
-import { GOOGLE_MAPS_KEY, popupHtml } from './mapsData'
+import { GOOGLE_MAPS_KEY, popupHtml, pinPopupHtml, PIN_SVG } from './mapsData'
 import { GOOGLE_MAPS_DAILY_LIMIT, takeGoogleMapLoad, consumeGoogleMapLoad } from './mapsQuota'
 
 /* ---------- load the Google Maps script once ---------- */
@@ -60,13 +60,14 @@ const clusterSize = (n) => (n < 10 ? 34 : n < 100 ? 40 : n < 1000 ? 48 : 56)
  * clustered with Supercluster and only the clusters / points inside the visible area are
  * drawn - usually a few hundred markers at most. Markers are re-used between redraws.
  */
-export default function GoogleMap({ points, colorOf, selected, onSelect, type, view, onView, fitKey, active }) {
+export default function GoogleMap({ points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin }) {
   const box = useRef(null)
   const map = useRef(null)
   const index = useRef(null)
   const byId = useRef(new Map())
   const drawn = useRef(new Map()) // key -> marker currently on the map
   const highlight = useRef(null)
+  const pinMk = useRef(null)
   const info = useRef(null)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState(authFailed ? 'auth' : null)
@@ -159,6 +160,7 @@ export default function GoogleMap({ points, colorOf, selected, onSelect, type, v
       authListeners.delete(onAuth)
       clearDrawn()
       highlight.current?.setMap(null)
+      pinMk.current?.setMap(null)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -211,6 +213,29 @@ export default function GoogleMap({ points, colorOf, selected, onSelect, type, v
     info.current.setContent(popupHtml(selected, colorOf(selected.supplier)))
     info.current.open({ map: map.current, anchor: highlight.current })
   }, [ready, selected, colorOf]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // searched coordinate: red pin + info window
+  useEffect(() => {
+    if (!ready) return
+    const gm = window.google.maps
+    pinMk.current?.setMap(null)
+    pinMk.current = null
+    if (!pin) return
+    const pos = { lat: pin.lat, lng: pin.lng }
+    pinMk.current = new gm.Marker({
+      position: pos, map: map.current, zIndex: 100000,
+      icon: { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(PIN_SVG), scaledSize: new gm.Size(30, 40), anchor: new gm.Point(15, 39) },
+    })
+    pinMk.current.addListener('click', () => {
+      info.current.setContent(pinPopupHtml(pin))
+      info.current.open({ map: map.current, anchor: pinMk.current })
+    })
+    if (!active) return
+    map.current.panTo(pos)
+    if (map.current.getZoom() < 15) map.current.setZoom(15)
+    info.current.setContent(pinPopupHtml(pin))
+    info.current.open({ map: map.current, anchor: pinMk.current })
+  }, [ready, pin]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="map-canvas" hidden={!active}>

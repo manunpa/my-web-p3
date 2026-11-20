@@ -97,6 +97,32 @@ export const googleMapsLink = (p) => `https://www.google.com/maps/search/?api=1&
 
 export const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
+// "13.7563, 100.5018", "13.7563 100.5018", "(13.7, 100.5)" or a Google Maps link -> { lat, lng }, else null.
+// A pair given as lng, lat is swapped back.
+export function parseCoords(s) {
+  const t = String(s).trim()
+  const m = t.match(/@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/) || t.match(/[?&](?:q|query|ll)=(-?\d+(?:\.\d+)?)(?:,|%2C)\s*(-?\d+(?:\.\d+)?)/i)
+    || t.match(/^\(?\s*(-?\d+(?:\.\d+)?)\s*(?:,|\s)\s*(-?\d+(?:\.\d+)?)\s*\)?$/)
+  if (!m) return null
+  let lat = +m[1], lng = +m[2]
+  if (Math.abs(lat) > 90 && Math.abs(lng) <= 90) [lat, lng] = [lng, lat]
+  if (!(Math.abs(lat) <= 90 && Math.abs(lng) <= 180)) return null
+  return { lat, lng }
+}
+
+// Red drop pin for a searched coordinate (both map engines). Tip is at (15, 39).
+export const PIN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="40" viewBox="0 0 30 40">'
+  + '<path d="M15 1C7.3 1 1 7.2 1 14.9 1 25.3 15 39 15 39s14-13.7 14-24.1C29 7.2 22.7 1 15 1z" fill="#ef4444" stroke="#fff" stroke-width="2"/>'
+  + '<circle cx="15" cy="15" r="5.5" fill="#fff"/></svg>'
+
+export function pinPopupHtml(p) {
+  return `<div class="mpop">
+    <div class="mpop-sup">พิกัดที่ค้นหา</div>
+    <code>${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</code>
+    <a href="${googleMapsLink(p)}" target="_blank" rel="noopener">เปิดใน Google Maps ↗</a>
+  </div>`
+}
+
 // Popup / info-window HTML shared by both map engines. Values from the sheet are escaped.
 export function popupHtml(p, color) {
   return `<div class="mpop">
