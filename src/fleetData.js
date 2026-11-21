@@ -2,14 +2,18 @@
 /* Data source for the fleet-alert dashboard                             */
 /* ------------------------------------------------------------------ */
 
+import { fetchProtectedJson } from './protectedFetch'
+
 // Google Sheet data link. Set to '' to show sample data instead.
 // Supported link types:
 //   - Apps Script web app returning JSON (array of objects keyed by column name)  <- current
 //   - Sheets API v4:   https://sheets.googleapis.com/v4/spreadsheets/<ID>/values/<Sheet>?key=<KEY>
 //   - gviz JSON:       https://docs.google.com/spreadsheets/d/<ID>/gviz/tq?tqx=out:json&sheet=<Sheet>
 //   - Published CSV:   https://docs.google.com/spreadsheets/d/e/<...>/pub?output=csv
+// The LEO Apps Script only answers signed-in users: the Firebase ID token is checked by
+// the script (code: my-website-pm/apps-script/leo.gs, shared with my-website-pm).
 export const API_URL =
-  'https://script.google.com/macros/s/AKfycbwrioeYqCEg1abXWwa-tdlLb16qPUDYLK6TSIT6N6PpmQWryOKgC8kzWGe3pXEBkH3V/exec'
+  'https://script.google.com/macros/s/AKfycbyWoNoFrTC1Ep3j395aio1ZP9E9qrTwubtUei2uydmoHnsIigYk7V8jN29wvl32t84W/exec'
 
 // How often the dashboard re-loads the sheet while open.
 export const REFRESH_MS = 5 * 60 * 1000
@@ -246,9 +250,13 @@ export function toRecords(table) {
 
 export async function loadAlerts() {
   if (!API_URL) return { ...toRecords(sampleTable()), sample: true }
-  const res = await fetch(API_URL, { cache: 'no-store' })
-  if (!res.ok) throw new Error(`Could not load the sheet (HTTP ${res.status}).`)
-  return { ...toRecords(toTable(await res.text())), sample: false }
+  let json
+  try {
+    json = await fetchProtectedJson(API_URL)
+  } catch (e) {
+    throw new Error(`Could not load the sheet (${e.message}).`)
+  }
+  return { ...toRecords(toTable(JSON.stringify(json))), sample: false }
 }
 
 /* ---------- sample data, shaped like the real sheet (used when API_URL is '') ---------- */
