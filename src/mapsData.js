@@ -2,9 +2,13 @@
 /* Data + keys for the Maps page                                        */
 /* ------------------------------------------------------------------ */
 
+import { fetchProtectedJson } from './protectedFetch'
+
 // Google Sheet (Apps Script) returning [{ Geofence, Latitude, Longitude, Supplier, ... }]
+// Only answers signed-in users: the Firebase ID token is checked by the script
+// (code: my-website-pm/apps-script/geofence.gs, shared with my-website-pm).
 export const GEOFENCE_API_URL =
-  'https://script.google.com/macros/s/AKfycbxGxDaEkB1IVbzSbMFkMJ08zfx9n9qIRDReGx9Mb-bg2n5C0jh8KuiwDnGjdjTvuVCF/exec'
+  'https://script.google.com/macros/s/AKfycbyZFJgBnwq8u-8ND1zQo9T9tJ6XuGX5ZXIAeip2EkI6uNf7eZOhIqAjU435doLMtABf/exec'
 
 // Google Maps JavaScript API key. A browser key is always visible to visitors, so it MUST be
 // restricted in Google Cloud Console -> Credentials -> this key:
@@ -61,9 +65,12 @@ export async function loadGeofences() {
 }
 
 async function fetchGeofences() {
-  const res = await fetch(GEOFENCE_API_URL, { cache: 'no-store' })
-  if (!res.ok) throw new Error(`โหลดข้อมูลพิกัดไม่สำเร็จ (HTTP ${res.status})`)
-  const json = await res.json()
+  let json
+  try {
+    json = await fetchProtectedJson(GEOFENCE_API_URL)
+  } catch (e) {
+    throw new Error(`โหลดข้อมูลพิกัดไม่สำเร็จ (${e.message})`)
+  }
   const rows = Array.isArray(json) ? json : (json.data ?? json.rows ?? [])
 
   const valid = []
