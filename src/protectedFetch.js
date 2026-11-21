@@ -9,7 +9,8 @@ import { auth } from './firebase'
 // The script answers { status: 'error', error: 'unauthorized' } for a bad or
 // expired token; we then force a fresh token and try once more.
 
-export async function fetchProtectedJson(url) {
+// `extra` is merged into the POST body (e.g. { source: 'notif-read', limit: 500 }).
+export async function fetchProtectedJson(url, extra = {}) {
   await auth.authStateReady()
   const user = auth.currentUser
   if (!user) throw new Error('ยังไม่ได้เข้าสู่ระบบ')
@@ -19,7 +20,7 @@ export async function fetchProtectedJson(url) {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ idToken }),
+      body: JSON.stringify({ ...extra, idToken }),
       cache: 'no-store',
       redirect: 'follow',
     })

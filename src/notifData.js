@@ -8,6 +8,7 @@ import {
 import { db } from './firebase'
 import { decode } from './adasData'
 import { norm } from './fleetData'
+import { fetchProtectedJson } from './protectedFetch'
 
 export const NOTIF_LIMIT = 500
 export const NOTIF_REFRESH_MS = 60 * 1000
@@ -244,6 +245,7 @@ export const SOURCES = {
     group: 'bsrc',
     sub: 'Lap',
     url: 'https://script.google.com/macros/s/AKfycbxLFR1aBglVpt49S33Vsk_H_iF68ePKfjq3UDUdhWEOAaIsEJpG_TMC90Mvs_3uTzm3/exec',
+    secure: true, // reads/writes need a Firebase login (apps-script/bsrc-alerts.gs + telegram-notif-post.gs)
     prefix: 'bsrc_',
     fields: {
       id: ['message_id'], time: ['เวลา'], received: ['received_at'],
@@ -326,6 +328,16 @@ export function toNotifs(rows, src) {
 }
 
 export async function loadNotifs(src) {
+  if (src.secure) {
+    let json
+    try {
+      json = await fetchProtectedJson(src.url, { source: 'notif-read', limit: NOTIF_LIMIT })
+    } catch (e) {
+      throw new Error(`Could not load notifications (${e.message}).`)
+    }
+    if (json?.error) throw new Error(json.error)
+    return toNotifs(decode(json), src)
+  }
   const res = await fetch(`${src.url}${src.url.includes('?') ? '&' : '?'}limit=${NOTIF_LIMIT}`, { cache: 'no-store' })
   if (!res.ok) throw new Error(`Could not load notifications (HTTP ${res.status}).`)
   const text = await res.text()
@@ -382,6 +394,11 @@ export const SHEET_STATUS_COL = 'สถานะการจัดการ'
 
 // text/plain avoids a CORS preflight, which Apps Script does not answer.
 async function postToSheet(src, items) {
+  if (src.secure) {
+    const json = await fetchProtectedJson(src.url, { source: 'notif-page', items })
+    if (json?.error) throw new Error(json.error)
+    return json
+  }
   const res = await fetch(src.url, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
