@@ -2,10 +2,12 @@
 /* Data source for the ADAS / DMS (Songdee) alert dashboard             */
 /* ------------------------------------------------------------------ */
 import { norm, parseDate, provinceOf } from './fleetData'
+import { fetchProtectedJson } from './protectedFetch'
 
 // Web app URL from apps-script/adas-dms.gs (ends with /exec). Leave '' to show sample data.
+// The script only answers signed-in users: the Firebase ID token is sent in a POST body.
 export const ADAS_API_URL =
-  'https://script.google.com/macros/s/AKfycbyeN8K-oGiYz4uWXDJRgGaEcU7TuRup72k4zJKVjrGNAuAC5GXycIWVgqNrBKGFpO_jEA/exec'
+  'https://script.google.com/macros/s/AKfycbzWSLqS08_jAeqdecNhTe7VHIPKj19hpIWe2YajpG004vBEr6SSPiqBX8CG6-u9pq0NMg/exec'
 
 export const REFRESH_MS = 5 * 60 * 1000
 
@@ -92,11 +94,12 @@ export function toRecords(rows) {
 
 export async function loadAdas() {
   if (!ADAS_API_URL) return { ...toRecords(sampleRows()), sample: true }
-  const res = await fetch(ADAS_API_URL, { cache: 'no-store' })
-  if (!res.ok) throw new Error(`Could not load the sheet (HTTP ${res.status}).`)
-  const text = await res.text()
-  if (/^\s*<(!doctype|html)/i.test(text)) throw new Error('The link returned a web page, not data. Is the script deployed with access "Anyone"?')
-  const json = JSON.parse(text)
+  let json
+  try {
+    json = await fetchProtectedJson(ADAS_API_URL)
+  } catch (e) {
+    throw new Error(`Could not load the sheet (${e.message}).`)
+  }
   if (json?.error) throw new Error(json.error)
   return { ...toRecords(decode(json)), sample: false }
 }
