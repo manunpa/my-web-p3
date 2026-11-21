@@ -2,11 +2,13 @@
 /* Data source for the help-button (ปุ่มช่วยเหลือ) dashboard             */
 /* ------------------------------------------------------------------ */
 import { norm, parseDate, provinceOf } from './fleetData'
+import { fetchProtectedJson } from './protectedFetch'
 
 // Apps Script web app returning { "<sheet name>": [ { column: value, ... }, ... ], ... }
-// One sheet per service provider.
+// One sheet per service provider. Code: apps-script/help.gs.
+// The script only answers signed-in users: the Firebase ID token is sent in a POST body.
 export const HELP_API_URL =
-  'https://script.google.com/macros/s/AKfycbw6c8ueZVLvwLiQOg3u0rLNDy1ZsbNPlltNv5cMPSagly5KPpS2jU_LLNFB1Zn6w9w4/exec'
+  'https://script.google.com/macros/s/AKfycbw4TvzjxA2X6AFXe28ZjeVzr0u8zjhOmzu9MpBWfWrRRcUzBimJLCxtiQFO3U4tJETj/exec'
 
 export const REFRESH_MS = 5 * 60 * 1000
 
@@ -99,11 +101,12 @@ function toRecords(rows, provider) {
 }
 
 export async function loadHelp() {
-  const res = await fetch(HELP_API_URL, { cache: 'no-store' })
-  if (!res.ok) throw new Error(`Could not load the sheet (HTTP ${res.status}).`)
-  const text = await res.text()
-  if (/^\s*<(!doctype|html)/i.test(text)) throw new Error('The link returned a web page, not data. Is the script shared publicly?')
-  const json = JSON.parse(text)
+  let json
+  try {
+    json = await fetchProtectedJson(HELP_API_URL)
+  } catch (e) {
+    throw new Error(`Could not load the sheet (${e.message}).`)
+  }
   const sheets = new Map(Object.entries(json).map(([name, rows]) => [norm(name), Array.isArray(rows) ? rows : []]))
   const missing = PROVIDERS.filter((p) => !sheets.has(p.sheet)).map((p) => p.id)
   const records = PROVIDERS.flatMap((p) => toRecords(sheets.get(p.sheet) ?? [], p.id))
