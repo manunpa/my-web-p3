@@ -1,33 +1,37 @@
 /**
- * Notifications page -> Google Sheet: saves how each Telegram alert was handled.
+ * Notifications page <-> Google Sheet (ไฟล์ notifPost ในโปรเจกต์ Apps Script ของแต่ละฟีดแจ้งเตือน)
  *
- * วิธีติดตั้ง (เพิ่มในโปรเจกต์ Apps Script เดิมของลิงก์แจ้งเตือน Telegram)
- *  1. เปิด Apps Script ของชีตข้อความ Telegram
- *  2. กด + ข้าง Files -> Script -> ตั้งชื่อ เช่น notifPost แล้ววางไฟล์นี้ทั้งหมด -> Save
- *  3. สคริปต์เดิมมี function doPost (รับข้อความจาก Telegram) อยู่แล้ว ห้ามสร้าง doPost ใหม่
- *     ให้เพิ่ม 2 บรรทัดนี้เป็นบรรทัดแรกสุดภายใน doPost เดิม (ก่อนการเช็กสิทธิ์ใดๆ):
+ *  1. handleNotifRead  : หน้าเว็บอ่านข้อมูลแจ้งเตือน (POST { source: 'notif-read', idToken, limit })
+ *                        ต้องล็อกอินเว็บ my-web-p3 (ตรวจ Firebase ID token)
+ *  2. handleNotifPost  : หน้าเว็บบันทึกสถานะการจัดการ (POST { source: 'notif-page', idToken, items })
+ *                        ตอน NOTIF_OPEN = false ต้องมี token ที่ใช้ได้
+ *  ข้อความจาก Telegram / wialon_forwarder.py ไม่มี source เหล่านี้ จึงทำงานตามโค้ดเดิมใน doPost ทุกอย่าง
  *
+ * ในไฟล์หลัก (Code.gs) ต้องมี
+ *   - บรรทัดแรกสุดใน doPost:
+ *       const read = handleNotifRead(e)
+ *       if (read) return read
  *       const notif = handleNotifPost(e)
  *       if (notif) return notif
+ *   - บรรทัดแรกสุดใน doGet:
+ *       if (!NOTIF_OPEN) return json({ error: 'unauthorized' })
+ *   - function readSheet(limit) ที่คืน { headers, values, rows }
  *
- *     ข้อความจาก Telegram จะไม่มี source: 'notif-page' จึงทำงานตามโค้ดเดิมทุกอย่าง
- *  4. Deploy -> Manage deployments -> แก้ไข (ไอคอนดินสอ) -> Version: New version -> Deploy
- *     ลิงก์ /exec เดิมจะใช้โค้ดใหม่ ไม่ต้องแก้ลิงก์ในเว็บ
- *
- * สิ่งที่ทำ
- *  - หาแท็บแรกที่แถวหัวคอลัมน์มี "message_id" (หรือกำหนด NOTIF_SHEET_NAME เอง)
- *  - ใช้ไฟล์เดียวกันนี้ได้ทุกสคริปต์ (PMS/NGV/OB เครื่อง 1 และ 2, TTT, BSRC) เครื่อง 2 ให้ตั้ง NOTIF_SHEET_NAME เป็นชื่อแท็บ
- *  - เพิ่มคอลัมน์ท้ายตารางให้อัตโนมัติถ้ายังไม่มี: สถานะการจัดการ, หมายเหตุการจัดการ, ผู้ดำเนินการ, เวลาดำเนินการ
- *  - หาแถวที่ message_id ตรงกัน แล้วเขียนทับ 4 ช่องนั้น
- *
- * ข้อมูลที่เว็บส่งมา (POST, body เป็น JSON):
- *   { "source": "notif-page", "items": [ { "id": "52106", "status": "รับทราบ", "note": "...", "by": "ชื่อผู้ใช้" }, ... ] }
- * ตอบกลับ: { "ok": true, "updated": 1, "notFound": [] }  หรือ  { "error": "..." }
+ * ทำ 2 รอบ (ไม่มีช่วงที่เว็บใช้ไม่ได้)
+ *   รอบ 1: NOTIF_OPEN = true  -> เปิดทั้งทางเดิม (GET) และทางใหม่ (ต้องล็อกอิน) แล้วเปลี่ยนเว็บไปใช้ทางใหม่
+ *   รอบ 2: NOTIF_OPEN = false -> ปิดทางเดิม
+ * แต่ละรอบ: Deploy -> Manage deployments -> ดินสอ -> Version: New version (ห้ามสร้างลิงก์ใหม่
+ *   เพราะโปรแกรมส่งแจ้งเตือนส่งเข้าลิงก์เดิม)
+ * หลังวางโค้ดครั้งแรก: เลือก authorize -> เรียกใช้ -> ตรวจสอบสิทธิ์ -> อนุญาต
  */
 
 const NOTIF_SHEET_NAME = '' // tab name, e.g. 'VSS Alerts'; '' or a missing tab = use the first tab with a message_id column
 const NOTIF_ID_HEADER = 'message_id'
 const NOTIF_SOURCE = 'notif-page' // must match the website's request
+const NOTIF_READ_SOURCE = 'notif-read' // website reading the alerts
+
+// รอบ 1 = true (ทางเดิมยังเปิด), รอบ 2 = false (ต้องล็อกอินเท่านั้น)
+const NOTIF_OPEN = true
 // The 4 columns written: status, note, who, when. Missing ones are added at the end of the header row.
 // เครื่อง 2 (PMS: แท็บ SCC Evidence, NGV: CCTV NGV Monitoring, OB: SCA OB, TTT: SCA TOYOTA, BSRC: BSRC COC) ใช้ค่านี้เหมือนกัน
 // ห้ามเปลี่ยนเป็น ผลตรวจสอบ/ผู้ตรวจสอบ/เวลาตรวจสอบ เพราะจะเขียนทับผลที่คนกรอกไว้ ให้ตั้งแค่ NOTIF_SHEET_NAME
@@ -37,6 +41,9 @@ function handleNotifPost(e) {
   let body
   try { body = JSON.parse((e && e.postData && e.postData.contents) || "{}") } catch (err) { return null }
   if (!body || body.source !== NOTIF_SOURCE) return null // not from the website: let doPost carry on (Telegram)
+  if (!NOTIF_OPEN && !verifyFirebaseToken_(body.idToken)) {
+    return notifJson({ status: 'error', error: 'unauthorized', reason: FAIL_REASON_, message: 'เซสชันหมดอายุหรือไม่มีสิทธิ์ กรุณาล็อกอินใหม่' })
+  }
   const lock = LockService.getScriptLock()
   try {
     lock.waitLock(20000)
@@ -46,6 +53,21 @@ function handleNotifPost(e) {
     return notifJson({ error: String((err && err.message) || err) })
   } finally {
     lock.releaseLock()
+  }
+}
+
+// หน้าเว็บอ่านข้อมูลแจ้งเตือน (ต้องล็อกอินเสมอ) ใช้ readSheet(limit) ของไฟล์หลัก
+function handleNotifRead(e) {
+  let body
+  try { body = JSON.parse((e && e.postData && e.postData.contents) || "{}") } catch (err) { return null }
+  if (!body || body.source !== NOTIF_READ_SOURCE) return null // not a read request: let doPost carry on
+  if (!verifyFirebaseToken_(body.idToken)) {
+    return notifJson({ status: 'error', error: 'unauthorized', reason: FAIL_REASON_, message: 'เซสชันหมดอายุหรือไม่มีสิทธิ์ กรุณาล็อกอินใหม่' })
+  }
+  try {
+    return notifJson(readSheet(parseInt(body.limit || '0', 10) || 0))
+  } catch (err) {
+    return notifJson({ error: String((err && err.message) || err) })
   }
 }
 
@@ -112,4 +134,69 @@ function findNotifSheet(ss) {
 
 function notifJson(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON)
+}
+
+// Firebase โปรเจกต์ที่ยอมรับ: projectId -> Web API key (ค่าจาก src/firebase.js ไม่ใช่ความลับ)
+// แยกเป็น 2 ท่อนเพื่อไม่ให้ถูกซ่อนเป็น ••• ตอนคัดลอก
+const FIREBASE_PROJECTS = {
+  'my-web-p3': ['AIzaSyA5OM2o', 'm_4CnwTuFAixQGwxhtyUUmDjv7Y'].join('')
+}
+
+// ครั้งแรกหลังวางโค้ด: เลือก authorize แล้วกด "เรียกใช้" -> ตรวจสอบสิทธิ์ -> อนุญาต
+// (ให้สคริปต์ติดต่อ Firebase ได้ — ถ้าไม่ทำ เว็บจะโหลดข้อมูลไม่ได้แม้ล็อกอินแล้ว)
+function authorize() {
+  UrlFetchApp.fetch('https://www.google.com')
+}
+
+/* ---------- ตรวจ Firebase ID token ---------- */
+
+let FAIL_REASON_ = ''
+function verifyFirebaseToken_(idToken) {
+  FAIL_REASON_ = 'no-token'
+  if (typeof idToken !== 'string' || idToken.length < 100 || idToken.length > 4096) return null
+  FAIL_REASON_ = 'claims'
+  const claims = decodeJwtPayload_(idToken)
+  const now = Math.floor(Date.now() / 1000)
+  const apiKey = claims && Object.prototype.hasOwnProperty.call(FIREBASE_PROJECTS, claims.aud)
+    ? FIREBASE_PROJECTS[claims.aud] : null
+  if (!apiKey || claims.iss !== 'https://securetoken.google.com/' + claims.aud || !(claims.exp > now)) return null
+
+  // จำผลไว้ไม่เกิน 5 นาที จะได้ไม่ต้องถาม Firebase ทุกครั้ง
+  const cache = CacheService.getScriptCache()
+  const key = 'fbtok_' + Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idToken))
+  const hit = cache.get(key)
+  if (hit) return JSON.parse(hit)
+
+  // ให้ Firebase ยืนยันลายเซ็นและสถานะบัญชีจริง
+  const res = UrlFetchApp.fetch('https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + apiKey, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({ idToken: idToken }),
+    muteHttpExceptions: true
+  })
+  if (res.getResponseCode() !== 200) {
+    let msg = ''
+    try { msg = JSON.parse(res.getContentText()).error.message } catch (err) {}
+    FAIL_REASON_ = 'lookup:' + String(msg || res.getResponseCode()).slice(0, 80)
+    return null
+  }
+  FAIL_REASON_ = 'account'
+  const u = (JSON.parse(res.getContentText()).users || [])[0]
+  if (!u || u.disabled || u.localId !== claims.sub) return null
+
+  const user = { project: claims.aud, uid: u.localId, email: String(u.email || '').toLowerCase() }
+  const ttl = Math.min(300, claims.exp - now)
+  if (ttl > 0) cache.put(key, JSON.stringify(user), ttl)
+  return user
+}
+
+function decodeJwtPayload_(jwt) {
+  try {
+    const part = jwt.split('.')[1]
+    const pad = part + '==='.slice((part.length + 3) % 4)
+    return JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(pad)).getDataAsString())
+  } catch (err) {
+    return null
+  }
 }
