@@ -2,10 +2,12 @@
 /* Data source for the driver behavior dashboard (บันทึกพฤติกรรม พขร.)   */
 /* ------------------------------------------------------------------ */
 import { norm, parseDate, provinceOf } from './fleetData'
+import { fetchProtectedJson } from './protectedFetch'
 
 // Web app URL from apps-script/driver-behavior.gs (ends with /exec). Leave '' to show sample data.
+// The script only answers signed-in users: the Firebase ID token is sent in a POST body.
 export const BEHAVIOR_API_URL =
-  'https://script.google.com/macros/s/AKfycbziW7PN3BuS00PR_xcJSpSREV_879aJ7PMuOxZSPacL0k14nJyhIpw4y_N5CogMubl5/exec'
+  'https://script.google.com/macros/s/AKfycbybNbKmgyu8krqHAAa334UxWZoiQ1w65zCEqPhweyDvLh0u92FMXlahmyMMdQOrbH29/exec'
 
 export const REFRESH_MS = 5 * 60 * 1000
 
@@ -149,11 +151,12 @@ export function toRecords(rows) {
 
 export async function loadBehavior() {
   if (!BEHAVIOR_API_URL) return { ...toRecords(sampleRows()), sample: true }
-  const res = await fetch(BEHAVIOR_API_URL, { cache: 'no-store' })
-  if (!res.ok) throw new Error(`Could not load the sheet (HTTP ${res.status}).`)
-  const text = await res.text()
-  if (/^\s*<(!doctype|html)/i.test(text)) throw new Error('The link returned a web page, not data. Is the script deployed with access "Anyone"?')
-  const json = JSON.parse(text)
+  let json
+  try {
+    json = await fetchProtectedJson(BEHAVIOR_API_URL)
+  } catch (e) {
+    throw new Error(`Could not load the sheet (${e.message}).`)
+  }
   if (json?.error) throw new Error(json.error)
   return { ...toRecords(decode(json)), sample: false }
 }
