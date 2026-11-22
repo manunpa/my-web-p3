@@ -278,6 +278,7 @@ export const SOURCES = {
     group: 'bsrc', // the same alerts, logged by the second (24-hour) machine into its own sheet
     sub: 'Desk',
     url: 'https://script.google.com/macros/s/AKfycbx7hgiz_BKEF-m2lfdGmV1LyYOt0-5dWXwgu8IbQzqFecrHnMDw3hj9UGcIBD0Bcqfi/exec?key=cf36d3977ad27f99516ca7619dac3d7e',
+    secure: true, // reads/writes need a Firebase login (apps-script/bsrc2-notif-post.gs)
     prefix: 'bsrc2_',
     fields: {
       id: ['message_id'], time: ['เวลาเกิดเหตุ'], received: ['เวลาข้อความ'],
