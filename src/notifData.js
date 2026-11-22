@@ -193,6 +193,7 @@ export const SOURCES = {
     group: 'ttt',
     sub: 'Lap',
     url: 'https://script.google.com/macros/s/AKfycbxTiiT_N_xfUx0DkoVcYSk7ee8XHW25CimN48z-TRARi0zoHG7wz-Qn35hs-OmKbUplwQ/exec',
+    secure: true, // reads/writes need a Firebase login (apps-script/ttt-alerts.gs + telegram-notif-post.gs)
     prefix: 'ttt_',
     fields: {
       id: ['message_id'], time: ['เวลา'], received: ['received_at'],
