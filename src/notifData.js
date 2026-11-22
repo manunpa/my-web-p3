@@ -122,6 +122,7 @@ export const SOURCES = {
     group: 'ngv', // the same alerts, logged by the second (24-hour) machine into its own sheet
     sub: 'Desk',
     url: 'https://script.google.com/macros/s/AKfycbz1ggXR9tfhX0zjmUZJjiupcovlWLVv00zS6L8eZ1aVZE4mVUihWqSdpdLafjW7P2ET/exec?key=1a24f9c5ddb6aeec4262ecb8f5e49da3',
+    secure: true, // reads/writes need a Firebase login (apps-script/ngv2-notif-post.gs)
     prefix: 'ngv2_',
     fields: {
       id: ['message_id'], time: ['เวลาเกิดเหตุ'], received: ['เวลาข้อความ'],
@@ -171,6 +172,7 @@ export const SOURCES = {
     group: 'ob', // the same alerts, logged by the second (24-hour) machine into its own sheet
     sub: 'Desk',
     url: 'https://script.google.com/macros/s/AKfycby_ELUU1hCoba2uL-A4b64J4OxBs6X5E6_HaOu-6vJg_DhrNX5jMUWFgoMJUSgxCh1Kxw/exec?key=e825a6bcf83b639d92dc3157197cfdfc',
+    secure: true, // reads/writes need a Firebase login (apps-script/ob2-notif-post.gs)
     prefix: 'ob2_',
     fields: {
       id: ['message_id'], time: ['เวลาเกิดเหตุ'], received: ['เวลาข้อความ'],
