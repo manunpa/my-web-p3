@@ -95,6 +95,7 @@ export const SOURCES = {
     group: 'ngv',
     sub: 'Lap',
     url: 'https://script.google.com/macros/s/AKfycbxM29qIRUvgpWTpKeYNxRHWr3BSseuWgYYUunQZ5dyEXn7JrdDLTs0EQgrAwNmtPxshdw/exec',
+    secure: true, // reads/writes need a Firebase login (apps-script/ngv-alerts.gs + telegram-notif-post.gs)
     prefix: 'ngv_',
     fields: {
       id: ['message_id'], time: ['เวลา'], received: ['received_at'],
