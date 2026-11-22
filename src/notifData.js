@@ -73,6 +73,7 @@ export const SOURCES = {
     group: 'pms', // a sub-tab under PMS: the same alerts, logged by the second (24-hour) machine into its own sheet
     sub: 'Desk',
     url: 'https://script.google.com/macros/s/AKfycby2v9rxFWKJUB3t0Q8q75k0Cehb88o-E4cTx7BSSehs1LU6BNKditO3ko-3yRejDgVL/exec?key=2ece0a1e4e69f0c8ddc282d10dfdf1b0',
+    secure: true, // reads/writes need a Firebase login (apps-script/pms2-notif-post.gs)
     prefix: 'pms2_',
     fields: {
       id: ['message_id'], alarm: ['เวลาเกิดเหตุ'], sent: ['เวลาแจ้งเตือน'], received: ['เวลาข้อความ'],
