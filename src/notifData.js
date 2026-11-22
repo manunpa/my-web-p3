@@ -72,7 +72,7 @@ export const SOURCES = {
     label: 'PMS 2',
     group: 'pms', // a sub-tab under PMS: the same alerts, logged by the second (24-hour) machine into its own sheet
     sub: 'Desk',
-    url: 'https://script.google.com/macros/s/AKfycby2v9rxFWKJUB3t0Q8q75k0Cehb88o-E4cTx7BSSehs1LU6BNKditO3ko-3yRejDgVL/exec?key=2ece0a1e4e69f0c8ddc282d10dfdf1b0',
+    url: 'https://script.google.com/macros/s/AKfycby2v9rxFWKJUB3t0Q8q75k0Cehb88o-E4cTx7BSSehs1LU6BNKditO3ko-3yRejDgVL/exec',
     secure: true, // reads/writes need a Firebase login (apps-script/pms2-notif-post.gs)
     prefix: 'pms2_',
     fields: {
@@ -121,7 +121,7 @@ export const SOURCES = {
     label: 'NGV 2',
     group: 'ngv', // the same alerts, logged by the second (24-hour) machine into its own sheet
     sub: 'Desk',
-    url: 'https://script.google.com/macros/s/AKfycbz1ggXR9tfhX0zjmUZJjiupcovlWLVv00zS6L8eZ1aVZE4mVUihWqSdpdLafjW7P2ET/exec?key=1a24f9c5ddb6aeec4262ecb8f5e49da3',
+    url: 'https://script.google.com/macros/s/AKfycbz1ggXR9tfhX0zjmUZJjiupcovlWLVv00zS6L8eZ1aVZE4mVUihWqSdpdLafjW7P2ET/exec',
     secure: true, // reads/writes need a Firebase login (apps-script/ngv2-notif-post.gs)
     prefix: 'ngv2_',
     fields: {
@@ -171,7 +171,7 @@ export const SOURCES = {
     label: 'OB 2',
     group: 'ob', // the same alerts, logged by the second (24-hour) machine into its own sheet
     sub: 'Desk',
-    url: 'https://script.google.com/macros/s/AKfycby_ELUU1hCoba2uL-A4b64J4OxBs6X5E6_HaOu-6vJg_DhrNX5jMUWFgoMJUSgxCh1Kxw/exec?key=e825a6bcf83b639d92dc3157197cfdfc',
+    url: 'https://script.google.com/macros/s/AKfycby_ELUU1hCoba2uL-A4b64J4OxBs6X5E6_HaOu-6vJg_DhrNX5jMUWFgoMJUSgxCh1Kxw/exec',
     secure: true, // reads/writes need a Firebase login (apps-script/ob2-notif-post.gs)
     prefix: 'ob2_',
     fields: {
@@ -225,7 +225,8 @@ export const SOURCES = {
     label: 'TTT 2',
     group: 'ttt', // the same alerts, logged by the second (24-hour) machine into its own sheet
     sub: 'Desk',
-    url: 'https://script.google.com/macros/s/AKfycbypAF8-VR3sfHgyvhW8pkrNJpjw7WWEbI5DU4sOv_Xi-IMMFLj9KMKaFySO4UYcrQNn/exec?key=d5a47996fd182ebf52971fd8b7403fd1',
+    url: 'https://script.google.com/macros/s/AKfycbypAF8-VR3sfHgyvhW8pkrNJpjw7WWEbI5DU4sOv_Xi-IMMFLj9KMKaFySO4UYcrQNn/exec',
+    secure: true, // reads/writes need a Firebase login (apps-script/ttt2-notif-post.gs)
     prefix: 'ttt2_',
     fields: {
       id: ['message_id'], time: ['เวลาเกิดเหตุ'], received: ['เวลาข้อความ'],
@@ -280,7 +281,7 @@ export const SOURCES = {
     label: 'BSRC COC 2',
     group: 'bsrc', // the same alerts, logged by the second (24-hour) machine into its own sheet
     sub: 'Desk',
-    url: 'https://script.google.com/macros/s/AKfycbx7hgiz_BKEF-m2lfdGmV1LyYOt0-5dWXwgu8IbQzqFecrHnMDw3hj9UGcIBD0Bcqfi/exec?key=cf36d3977ad27f99516ca7619dac3d7e',
+    url: 'https://script.google.com/macros/s/AKfycbx7hgiz_BKEF-m2lfdGmV1LyYOt0-5dWXwgu8IbQzqFecrHnMDw3hj9UGcIBD0Bcqfi/exec',
     secure: true, // reads/writes need a Firebase login (apps-script/bsrc2-notif-post.gs)
     prefix: 'bsrc2_',
     fields: {
