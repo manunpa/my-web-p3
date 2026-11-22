@@ -144,6 +144,7 @@ export const SOURCES = {
     group: 'ob',
     sub: 'Lap',
     url: 'https://script.google.com/macros/s/AKfycbwvRpEnb_BhS8klzmtyegScU5knjkFTldWrwHjV0JXJIJIh9gQMRTicy7wVtJ43GN5pzA/exec',
+    secure: true, // reads/writes need a Firebase login (apps-script/ob-alerts.gs + telegram-notif-post.gs)
     prefix: 'ob_',
     fields: {
       id: ['message_id'], time: ['เวลา'], received: ['received_at'],
