@@ -50,6 +50,7 @@ export const SOURCES = {
     group: 'pms',
     sub: 'Lap',
     url: 'https://script.google.com/macros/s/AKfycbyrSPxsAz9pY1Rswe1tIsvyg3sAq3Yh3wbWg2RmZCe6xMeTh4YiakBFWSBDWpgOYAuvIg/exec',
+    secure: true, // reads/writes need a Firebase login (apps-script/pms-alerts.gs + pms-notif-post.gs)
     prefix: '', // PMS was first; its ids stay as they are so saved statuses keep working
     fields: {
       id: ['message_id'], alarm: ['เวลาปลุก'], sent: ['เวลาส่ง'], received: ['received_at'],
