@@ -9,7 +9,7 @@
  *
  * ขั้นตอน:
  *  1. วางโค้ดนี้ -> บันทึก
- *  2. ตั้ง DIST_SHEET_NAME เป็นชื่อแท็บ (เว้นว่าง = หาแท็บที่มีหัวคอลัมน์ลูกค้า + ระยะทางให้เอง)
+ *  2. DIST_SHEET_NAME เว้นว่างไว้ = อ่านทุกแท็บที่มีหัวคอลัมน์ลูกค้า + ระยะทาง แล้วรวมกัน
  *  3. เลือกฟังก์ชัน authorize -> เรียกใช้ -> ตรวจสอบสิทธิ์ -> อนุญาต
  *  4. เลือกฟังก์ชัน testData -> เรียกใช้ -> ดูบันทึกการดำเนินการว่าเจอคอลัมน์ถูกต้อง
  *  5. ทำให้ใช้งานได้ -> การทำให้ใช้งานได้รายการใหม่ -> ประเภท: เว็บแอป
@@ -18,7 +18,7 @@
  *  แก้โค้ดครั้งต่อไป: Deploy -> Manage deployments -> ดินสอ -> Version: New version (ลิงก์เดิมใช้ต่อได้)
  */
 
-const DIST_SHEET_NAME = '' // เช่น 'ระยะทาง' · เว้นว่าง = หาให้เอง
+const DIST_SHEET_NAME = '' // เว้นว่าง = อ่านทุกแท็บ · ใส่ชื่อ (เช่น 'ระยะทาง') = อ่านแท็บเดียว
 const DIST_READ_SOURCE = 'distance-read' // ต้องตรงกับที่หน้าเว็บส่งมา
 
 // หัวคอลัมน์ที่รู้จัก (ตัวแรกที่ตรงจะถูกใช้)
@@ -48,43 +48,54 @@ function doPost(e) {
   }
 }
 
-// อ่านทั้งแท็บ -> [{ depot, customer, distance }] (ข้ามแถวที่ไม่มีลูกค้าหรือระยะทางไม่ใช่ตัวเลข)
+// อ่านทุกแท็บที่มีหัวคอลัมน์ลูกค้า + ระยะทาง แล้วรวมกัน -> [{ sheet, depot, customer, distance }]
+// แท็บที่ไม่มีหัวคอลัมน์แบบนี้ถูกข้าม · แท็บที่ไม่มีคอลัมน์คลัง ใช้ชื่อแท็บเป็นคลัง
+// ข้ามแถวที่ไม่มีลูกค้าหรือระยะทางไม่ใช่ตัวเลข
 function readDistances_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet()
   const sheets = DIST_SHEET_NAME ? [ss.getSheetByName(DIST_SHEET_NAME)] : ss.getSheets()
   if (!sheets[0]) throw new Error('ไม่พบแท็บ ' + DIST_SHEET_NAME)
 
-  for (const sheet of sheets) {
+  const rows = []
+  const used = [] // แท็บที่อ่าน: { sheet, headers, count }
+  const skipped = [] // แท็บที่ไม่มีหัวคอลัมน์ลูกค้า + ระยะทาง
+  sheets.forEach((sheet) => {
+    const name = sheet.getName()
     const values = sheet.getDataRange().getDisplayValues()
-    for (let h = 0; h < Math.min(values.length, 10); h++) {
-      const cols = findCols_(values[h])
-      if (cols.customer < 0 || cols.distance < 0) continue
-      const rows = []
-      for (let r = h + 1; r < values.length; r++) {
-        const row = values[r]
-        const customer = String(row[cols.customer] || '').trim()
-        const distance = parseFloat(String(row[cols.distance] || '').replace(/,/g, ''))
-        if (!customer || !isFinite(distance)) continue
-        rows.push({
-          depot: cols.depot >= 0 ? String(row[cols.depot] || '').trim() : '',
-          customer: customer,
-          distance: distance,
-        })
-      }
-      return {
-        ok: true,
-        sheet: sheet.getName(),
-        headers: {
-          depot: cols.depot >= 0 ? values[h][cols.depot] : '',
-          customer: values[h][cols.customer],
-          distance: values[h][cols.distance],
-        },
-        count: rows.length,
-        rows: rows,
-      }
+    let h = -1
+    let cols = null
+    for (let i = 0; i < Math.min(values.length, 10); i++) {
+      const c = findCols_(values[i])
+      if (c.customer >= 0 && c.distance >= 0) { h = i; cols = c; break }
     }
-  }
-  throw new Error('ไม่พบหัวคอลัมน์ลูกค้าและระยะทาง (ดู DIST_HEADERS)')
+    if (h < 0) { skipped.push(name); return }
+
+    let count = 0
+    for (let r = h + 1; r < values.length; r++) {
+      const row = values[r]
+      const customer = String(row[cols.customer] || '').trim()
+      const distance = parseFloat(String(row[cols.distance] || '').replace(/,/g, ''))
+      if (!customer || !isFinite(distance)) continue
+      rows.push({
+        sheet: name,
+        depot: cols.depot >= 0 ? String(row[cols.depot] || '').trim() || name : name,
+        customer: customer,
+        distance: distance,
+      })
+      count++
+    }
+    used.push({
+      sheet: name,
+      headers: {
+        depot: cols.depot >= 0 ? values[h][cols.depot] : '(ชื่อแท็บ)',
+        customer: values[h][cols.customer],
+        distance: values[h][cols.distance],
+      },
+      count: count,
+    })
+  })
+  if (!used.length) throw new Error('ไม่พบแท็บที่มีหัวคอลัมน์ลูกค้าและระยะทาง (ดู DIST_HEADERS)')
+  return { ok: true, sheets: used, skipped: skipped, count: rows.length, rows: rows }
 }
 
 function findCols_(header) {
@@ -107,8 +118,9 @@ function distJson_(obj) {
 // ทดสอบในหน้า Apps Script: เลือก testData แล้วกด "เรียกใช้"
 function testData() {
   const out = readDistances_()
-  Logger.log('แท็บ: ' + out.sheet + ' | แถว: ' + out.count)
-  Logger.log('คอลัมน์ที่ใช้: ' + JSON.stringify(out.headers))
+  Logger.log('รวมทั้งหมด: ' + out.count + ' แถว จาก ' + out.sheets.length + ' แท็บ')
+  out.sheets.forEach((s) => Logger.log('แท็บ ' + s.sheet + ': ' + s.count + ' แถว · คอลัมน์ ' + JSON.stringify(s.headers)))
+  if (out.skipped.length) Logger.log('ข้าม (ไม่มีหัวคอลัมน์ลูกค้า + ระยะทาง): ' + out.skipped.join(', '))
   Logger.log('ตัวอย่าง: ' + JSON.stringify(out.rows.slice(0, 5)))
 }
 
