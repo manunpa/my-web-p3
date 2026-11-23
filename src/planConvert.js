@@ -107,8 +107,8 @@ export function parseWhen(v) {
   const date = findDate(s)
   if (date) s = s.replace(/(\d{1,2})\s*[/.-]\s*(\d{1,2})\s*[/.-]\s*(\d{2,4})/, ' ')
   let time = null
-  let m = s.match(/(\d{1,2})\s*[:.;]\s*(\d{2})/)
-  if (m && +m[1] < 24 && +m[2] < 60) time = { h: +m[1], mi: +m[2] }
+  let m = s.match(/(\d{1,2})\s*[:.;]\s*(\d{2})(?::(\d{2}))?/)
+  if (m && +m[1] < 24 && +m[2] < 60) time = { h: +m[1], mi: +m[2], s: m[3] && +m[3] < 60 ? +m[3] : 0 }
   else if ((m = s.match(/(?:^|\D)(\d{1,2})\s*(?:น|โมง)/)) && +m[1] < 24) time = { h: +m[1], mi: 0 }
   return date || time ? { date, time } : null
 }
@@ -116,8 +116,11 @@ export function parseWhen(v) {
 const at = (ymd, time) => new Date(ymd.y, ymd.m - 1, ymd.d, time?.h ?? 0, time?.mi ?? 0)
 const ymdOf = (dt) => ({ y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() })
 const be = (dt) => `${pad(dt.getDate())}/${pad(dt.getMonth() + 1)}/${dt.getFullYear() + 543}`
-const fmtArrive = (dt) => `${be(dt)} ${pad(dt.getHours())}.${pad(dt.getMinutes())} น.` // template uses a dot here
-const fmtDepart = (dt) => `${be(dt)} ${pad(dt.getHours())}:${pad(dt.getMinutes())} น.`
+// 23/11/2569 06:00:00 — exported as a real Excel date-time (see writeXlsx)
+const fmtDateTime = (dt) => `${be(dt)} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`
+const fmtArrive = fmtDateTime
+const fmtDepart = fmtDateTime
+const DATETIME_COLS = [5, 7, 8] // ถึงลูกค้า, ออกเดินทาง, เริ่มงาน
 export const toInputDate = (ymd) => `${ymd.y}-${pad(ymd.m)}-${pad(ymd.d)}`
 export const fromInputDate = (s) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || '')
@@ -441,6 +444,11 @@ export async function writeXlsx(rows) {
         const d = findDate(v)
         return d ? new Date(Date.UTC(d.y, d.m - 1, d.d)) : v
       }
+      if (DATETIME_COLS.includes(i)) {
+        const w = parseWhen(v)
+        if (w?.date && w.time) return new Date(Date.UTC(w.date.y, w.date.m - 1, w.date.d, w.time.h, w.time.mi, w.time.s || 0))
+        return v
+      }
       return [0, 6, 11, 12].includes(i) && num(v) != null ? num(v) : v
     })
     const row = ws.addRow(values)
@@ -449,6 +457,7 @@ export async function writeXlsx(rows) {
       c.font = font
       c.border = border
       c.alignment = { vertical: 'middle', horizontal: i === 5 || i === 11 ? 'left' : 'center' }
+      if (DATETIME_COLS.includes(i - 1) && c.value instanceof Date) c.numFmt = 'dd/mm/bbbb hh:mm:ss' // bbbb = Buddhist year
     }
     row.getCell(2).numFmt = 'd-mmm' // same as the template
   }
