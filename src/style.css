@@ -205,6 +205,7 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .insight .clip{max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .insight .clip.wide{max-width:280px}
 .insight small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+.insight small.subs{max-width:300px;white-space:normal}
 .insight .long{color:var(--err);font-weight:600}
 .cell-bar{display:inline-block;width:70px;height:8px;margin-right:8px;border-radius:4px;background:var(--field);overflow:hidden;vertical-align:middle}
 .cell-bar i{display:block;height:100%;border-radius:4px;background:var(--gold)}

@@ -29,16 +29,27 @@ function topOf(rows, key) {
 
 const avgMin = (rows) => (rows.length ? rows.reduce((s, r) => s + (r.minutes || 0), 0) / rows.length : 0)
 
-/* 1. Places where cases repeat: sub-district + district (province when the address does not say). */
-export function hotspots(rows, limit = 12) {
-  return [...groupBy(rows, (r) => r.area || r.province)]
-    .map(([name, list]) => ({
-      name,
+/* 1. Places where cases repeat (province when the address does not say).
+      level 'district': one row per district (อำเภอ/เขต), e.g. all of ลำลูกกา together, listing its
+      busiest sub-districts. level 'area': one row per sub-district + district. */
+const districtOf = (r) => (r.area ? r.area.split(' · ').pop() : '')
+const subOf = (r) => (r.area && r.area.includes(' · ') ? r.area.split(' · ')[0] : '')
+
+export function hotspots(rows, level = 'district', limit = 12) {
+  const key = level === 'district'
+    ? (r) => (districtOf(r) ? `${districtOf(r)}|${r.province}` : r.province)
+    : (r) => r.area || r.province
+  return [...groupBy(rows, key)]
+    .map(([k, list]) => ({
+      name: k.split('|')[0],
       province: list[0].province,
       count: list.length,
       top: topOf(list, 'stopType'),
       avg: avgMin(list),
       drivers: new Set(list.map((r) => r.driver)).size,
+      subs: level === 'district'
+        ? [...groupBy(list, subOf)].map(([name, l]) => ({ name, value: l.length })).sort((a, b) => b.value - a.value)
+        : [],
     }))
     .sort((a, b) => b.count - a.count)
     .slice(0, limit)

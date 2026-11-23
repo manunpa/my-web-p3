@@ -125,7 +125,7 @@ function analyse(records, range, palette, compareLabel) {
   return {
     rows, daily, hours, typeSlices,
     stopTypes, stopHeat, stopAvg,
-    hot: hotspots(rows), noise: noise(rows), resp: response(rows),
+    hot: { district: hotspots(rows, 'district'), area: hotspots(rows, 'area') }, noise: noise(rows), resp: response(rows),
     longs: longStops(rows), rej: rejectedOf(rows), week: weekHeat(rows),
     ranks: Object.fromEntries(RANKS.map((k) => [k.id, countBy(rows.filter((r) => k.id !== 'releasedBy' || r.releasedBy), k.id)])),
     kpis: [
@@ -275,7 +275,16 @@ function Hotspots({ data }) {
           {data.map((h, i) => (
             <tr key={h.name} style={{ '--i': Math.min(i, 12) }}>
               <td className="muted">{i + 1}</td>
-              <td className="nowrap">{h.name}{h.name !== h.province && <small>{h.province}</small>}</td>
+              <td>
+                <span className="nowrap">{h.name}</span>
+                {h.name !== h.province && <small>{h.province}</small>}
+                {h.subs.length > 1 && (
+                  <small className="subs" title={h.subs.map((s) => `${s.name || 'ไม่ระบุตำบล'} ${s.value}`).join(' · ')}>
+                    {h.subs.slice(0, 3).map((s) => `${s.name || 'ไม่ระบุตำบล'} ${nf.format(s.value)}`).join(' · ')}
+                    {h.subs.length > 3 && ` · อีก ${h.subs.length - 3} ตำบล`}
+                  </small>
+                )}
+              </td>
               <td className="num">
                 <span className="cell-bar"><i style={{ width: `${(h.count / max) * 100}%` }} /></span>{nf.format(h.count)}
               </td>
@@ -422,6 +431,7 @@ export default function Dashboard() {
   const noiseMonths = useMemo(() => noiseByMonth(state.records), [state.records])
   const stopPal = useMemo(() => stopPalette(state.records), [state.records])
   const stopMonths = useMemo(() => monthly(state.records, stopPal.split, range), [state.records, stopPal, range])
+  const [hotLevel, setHotLevel] = useState('district')
   const [drillType, setDrillType] = useState('')
   const [drillBy, setDrillBy] = useState('driver')
   const drillOptions = data ? data.stopTypes : []
@@ -587,8 +597,18 @@ export default function Dashboard() {
               </Panel>
 
               <Panel className="span-2" i={14} title="จุดที่เกิดซ้ำ"
-                note="12 พื้นที่ (ตำบล · อำเภอ) ที่มีเคสมากสุดในช่วงที่เลือก · ไม่มีตำบลในที่อยู่จะนับรวมเป็นจังหวัด">
-                <Hotspots data={data.hot} />
+                note={hotLevel === 'district'
+                  ? '12 อำเภอ/เขต ที่มีเคสมากสุดในช่วงที่เลือก รวมทุกตำบลในอำเภอ · ที่อยู่ที่ไม่ระบุอำเภอนับเป็นจังหวัด'
+                  : '12 ตำบล · อำเภอ ที่มีเคสมากสุดในช่วงที่เลือก · ที่อยู่ที่ไม่ระบุตำบลนับเป็นจังหวัด'}
+                actions={(
+                  <div className="seg-ctl small" role="radiogroup" aria-label="รวมระดับ">
+                    {[['district', 'อำเภอ'], ['area', 'ตำบล']].map(([id, label]) => (
+                      <button key={id} type="button" role="radio" aria-checked={hotLevel === id}
+                        className={hotLevel === id ? 'on' : ''} onClick={() => setHotLevel(id)}>{label}</button>
+                    ))}
+                  </div>
+                )}>
+                <Hotspots data={data.hot[hotLevel]} />
               </Panel>
 
               <Panel i={15} title="แจ้งเตือนที่ไม่ต้องตรวจจริง" note={`ไฟแดง/จราจร ที่จอดไม่เกิน ${SHORT_MIN} นาที`}>
