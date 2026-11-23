@@ -477,3 +477,19 @@ input[type=date],input[type=datetime-local],input[type=time],input[type=month]{m
 .conv-table tr.first td{border-top:1px solid var(--line)}
 .spin{animation:spin 1s linear infinite}
 @media (max-width:640px){.conv-opts{grid-template-columns:minmax(0,1fr)}.conv-carrier{max-width:none}.conv .panel-head{flex-wrap:wrap}}
+.conv-actions{display:flex;gap:8px;flex-wrap:wrap}
+.conv-btn{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--field);color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+.conv-btn:hover{border-color:var(--gold-text)}
+.conv-add{margin-top:12px}
+.conv-hint{margin:-4px 0 10px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.conv .conv-table td{padding:3px 4px}
+.conv .conv-table td input{height:30px;padding:0 6px;border-radius:7px;border:1px solid transparent;background:none;font-size:12px;width:auto}
+.conv .conv-table td input:hover{border-color:var(--line)}
+.conv .conv-table td input:focus{border-color:var(--gold-text);background:var(--field)}
+.conv-table td.auto{padding:3px 10px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
+.conv-table td.edited input{background:rgba(250,204,21,.12)}
+.conv-table tr.added td{background:rgba(134,239,172,.06)}
+.conv-row-act{white-space:nowrap}
+.conv-row-act button{display:inline-grid;place-items:center;width:26px;height:26px;margin-right:2px;border-radius:7px;border:1px solid transparent;background:none;color:var(--muted);cursor:pointer}
+.conv-row-act button:hover{border-color:var(--gold-text);color:var(--gold-text)}
+.conv-row-act button.del:hover{border-color:var(--err);color:var(--err)}

@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Upload, FileSpreadsheet, Download, X, AlertTriangle, Loader2 } from 'lucide-react'
 import {
-  OUT_HEAD, readBook, readSheet, pickSheet, sheetDate, guessDepot, convertSheet, toRows,
+  ArrowLeft, Upload, FileSpreadsheet, Download, X, AlertTriangle, Loader2, Plus, Trash2, RotateCcw,
+} from 'lucide-react'
+import {
+  OUT_HEAD, readBook, readSheet, pickSheet, sheetDate, guessDepot, convertSheet, toRows, numberRows,
   writeXlsx, fmtYmd, toInputDate, fromInputDate,
 } from './planConvert'
+
+// Input width (characters) per output column.
+const COL_SIZE = [0, 10, 6, 10, 30, 17, 6, 17, 17, 9, 18, 3, 0]
 
 const today = () => {
   const d = new Date()
@@ -63,9 +68,49 @@ export default function DocumentsPage() {
     const date = fromInputDate(f.date) ?? today()
     return convertSheet(f.rows, { date, depot: f.depot.trim(), carrier: carrier.trim() })
   }), [files, carrier])
-  const trips = results.flatMap((r) => r?.trips ?? [])
-  const rows = useMemo(() => toRows(trips), [results]) // eslint-disable-line react-hooks/exhaustive-deps
+  const base = useMemo(
+    () => files.flatMap((f, i) => (results[i]?.trips ? toRows(results[i].trips, `${f.id}:`) : [])),
+    [files, results],
+  )
+
+  // Changes made in the table. They are kept by row key, so they survive changing another file's settings.
+  const [edits, setEdits] = useState({}) // key -> { column: value }
+  const [added, setAdded] = useState([]) // { key, after, start, cells }
+  const [removed, setRemoved] = useState(() => new Set())
+
+  const table = useMemo(() => {
+    const list = [...base]
+    for (const a of added) {
+      const at = list.findIndex((r) => r.key === a.after)
+      list.splice(at < 0 ? list.length : at + 1, 0, a)
+    }
+    return list
+      .filter((r) => !removed.has(r.key))
+      .map((r) => ({ ...r, added: r.key.startsWith('n'), cells: r.cells.map((v, c) => (edits[r.key] && c in edits[r.key] ? edits[r.key][c] : v)) }))
+  }, [base, added, removed, edits])
+  const rows = useMemo(() => numberRows(table), [table])
   const drops = rows.length
+  const tripCount = table.filter((r, i) => r.start || i === 0).length
+  const changes = Object.values(edits).reduce((n, e) => n + Object.keys(e).length, 0) + added.length + removed.size
+
+  const editCell = (key, col, value) => setEdits((e) => ({ ...e, [key]: { ...e[key], [col]: value } }))
+  const addRow = (after, start) => {
+    const cells = Array(OUT_HEAD.length).fill(null)
+    if (start) {
+      const first = files.find((f) => f.status === 'ready')
+      cells[1] = fmtYmd(fromInputDate(first?.date) ?? today())
+      cells[2] = carrier.trim() || null
+      cells[11] = 1
+    }
+    setAdded((a) => [...a, { key: `n${nextId++}`, after, start, cells }])
+  }
+  // Removing a trip's first row removes the whole trip, so its drops don't join the trip above.
+  const removeRow = (i) => {
+    const keys = [table[i].key]
+    if (table[i].start) for (let j = i + 1; j < table.length && !table[j].start; j++) keys.push(table[j].key)
+    setRemoved((s) => new Set([...s, ...keys]))
+  }
+  const resetEdits = () => { setEdits({}); setAdded([]); setRemoved(new Set()) }
 
   const download = async () => {
     setSaving(true)
@@ -146,27 +191,54 @@ export default function DocumentsPage() {
         {files.length > 0 && (
           <section className="panel" style={{ '--i': 2 }}>
             <div className="panel-head">
-              <h2>ตัวอย่างผลลัพธ์ <span className="muted">{trips.length} เที่ยว · {drops} จุดส่ง</span></h2>
-              <button type="button" className="conv-dl" onClick={download} disabled={!drops || saving}>
-                {saving ? <Loader2 size={15} className="spin" /> : <Download size={15} />} ดาวน์โหลด Excel
-              </button>
+              <h2>ตรวจและแก้ไขก่อนส่งออก <span className="muted">{tripCount} เที่ยว · {drops} จุดส่ง</span></h2>
+              <div className="conv-actions">
+                {changes > 0 && (
+                  <button type="button" className="conv-btn" onClick={resetEdits} title="ยกเลิกการแก้ไข เพิ่ม และลบทั้งหมด">
+                    <RotateCcw size={14} /> ล้างการแก้ไข ({changes})
+                  </button>
+                )}
+                <button type="button" className="conv-dl" onClick={download} disabled={!drops || saving}>
+                  {saving ? <Loader2 size={15} className="spin" /> : <Download size={15} />} ดาวน์โหลด Excel
+                </button>
+              </div>
             </div>
-            {drops ? (
+            <p className="muted conv-hint">
+              คลิกช่องเพื่อแก้ไข · <Plus size={12} /> เพิ่มจุดส่งใต้แถวนั้น · <Trash2 size={12} /> ลบแถว (ลบแถวแรกของเที่ยว = ลบทั้งเที่ยว)
+              · ลำดับและ TRIP_DROP นับให้อัตโนมัติ
+            </p>
+            {drops > 0 && (
               <div className="table-scroll">
                 <table className="orders conv-table">
-                  <thead><tr>{OUT_HEAD.map((h) => <th key={h}>{h}</th>)}</tr></thead>
+                  <thead><tr><th aria-label="จัดการแถว" />{OUT_HEAD.map((h) => <th key={h}>{h}</th>)}</tr></thead>
                   <tbody>
-                    {rows.map((r, i) => (
-                      <tr key={i} className={r[0] ? 'first' : ''}>
-                        {r.map((v, j) => <td key={j}>{j === 1 ? fmtYmd(v) : v ?? ''}</td>)}
+                    {table.map((r, i) => (
+                      <tr key={r.key} className={`${r.start ? 'first' : ''}${r.added ? ' added' : ''}`}>
+                        <td className="conv-row-act">
+                          <button type="button" onClick={() => addRow(r.key, false)} title="เพิ่มจุดส่งใต้แถวนี้" aria-label="เพิ่มจุดส่งใต้แถวนี้"><Plus size={14} /></button>
+                          <button type="button" className="del" onClick={() => removeRow(i)} title={r.start ? 'ลบทั้งเที่ยว' : 'ลบแถวนี้'} aria-label={r.start ? 'ลบทั้งเที่ยว' : 'ลบแถวนี้'}><Trash2 size={14} /></button>
+                        </td>
+                        {rows[i].map((v, c) => (c === 0 || c === 12 ? (
+                          <td key={c} className="auto">{v ?? ''}</td>
+                        ) : (
+                          <td key={c} className={edits[r.key] && c in edits[r.key] ? 'edited' : ''}>
+                            <input
+                              value={v ?? ''}
+                              size={COL_SIZE[c]}
+                              onChange={(e) => editCell(r.key, c, e.target.value)}
+                              aria-label={`${OUT_HEAD[c]} แถว ${i + 1}`}
+                            />
+                          </td>
+                        )))}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            ) : (
-              <p className="muted">ยังไม่มีรายการที่แปลงได้</p>
             )}
+            <button type="button" className="conv-btn conv-add" onClick={() => addRow(table.at(-1)?.key ?? null, true)}>
+              <Plus size={14} /> เพิ่มเที่ยวใหม่
+            </button>
           </section>
         )}
       </main>

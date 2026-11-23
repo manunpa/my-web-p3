@@ -316,14 +316,17 @@ function resolveTimes(t, base) {
 
 // trips -> output rows in the template layout. The first drop of a trip carries the trip details,
 // later drops only the customer, arrival time, distance and drop number.
-export function toRows(trips) {
+// Each row is { key, start, cells }: `key` stays the same while the file and its settings
+// produce the same trips, so edits made on the page can be kept; `start` marks a trip's first row.
+// ลำดับ and TRIP_DROP are filled in by numberRows.
+export function toRows(trips, prefix = '') {
   const out = []
   trips.forEach((t, i) => {
     t.drops.forEach((d, j) => {
       const first = j === 0
-      out.push([
-        first ? i + 1 : null,
-        first ? t.dateYmd : null,
+      out.push({ key: `${prefix}${i}:${j}`, start: first, cells: [
+        null,
+        first ? fmtYmd(t.dateYmd) : null,
         first ? t.carrier : null,
         first ? t.depot : null,
         d.customer,
@@ -334,11 +337,25 @@ export function toRows(trips) {
         first ? t.plate : null,
         first ? t.driver : null,
         first ? t.no : null,
-        j + 1,
-      ])
+        null,
+      ] })
     })
   })
   return out
+}
+
+// Numbers the trips (ลำดับ) and the drops within each trip (TRIP_DROP), in table order.
+export function numberRows(rows) {
+  let seq = 0
+  let drop = 0
+  return rows.map((r) => {
+    if (r.start || seq === 0) { seq++; drop = 0 }
+    drop++
+    const cells = [...r.cells]
+    cells[0] = r.start ? seq : null
+    cells[12] = drop
+    return cells
+  })
 }
 
 export const fmtYmd = (ymd) => (ymd ? `${pad(ymd.d)}/${pad(ymd.m)}/${ymd.y + 543}` : '')
@@ -416,7 +433,16 @@ export async function writeXlsx(rows) {
   })
 
   for (const r of rows) {
-    const values = r.map((v, i) => (i === 1 && v ? new Date(Date.UTC(v.y, v.m - 1, v.d)) : v))
+    // Cells are text after editing: the date column becomes a real date, number columns real numbers.
+    const values = r.map((v, i) => {
+      v = clean(v)
+      if (v == null) return null
+      if (i === 1) {
+        const d = findDate(v)
+        return d ? new Date(Date.UTC(d.y, d.m - 1, d.d)) : v
+      }
+      return [0, 6, 11, 12].includes(i) && num(v) != null ? num(v) : v
+    })
     const row = ws.addRow(values)
     for (let i = 1; i <= OUT_HEAD.length; i++) {
       const c = row.getCell(i)
