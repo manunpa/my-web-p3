@@ -152,13 +152,29 @@ const tripNumber = (v) => {
   return n >= 1 && n <= 20 ? n : null
 }
 
+// Depot names -> the code the plan uses. Checked in order (BSRC before SRC: "BSRC" contains "SRC").
+const DEPOT_CODES = [
+  [/พิจิตร|\bPCT\b/i, 'PCT'],
+  [/นครสวรรค์|PTT\s*NSW|\bNSW\b/i, 'PTT NSW'],
+  [/บางปะกง|BPK/i, 'BPK'],
+  [/บางจาก|BSRC/i, 'BSRC'],
+  [/BRP/i, 'BRP'],
+  [/SRC/i, 'SRC'],
+  [/SCN/i, 'SCN'],
+]
+// The depot code found in a text, or null.
+export function knownDepot(s) {
+  s = String(s ?? '')
+  for (const [re, code] of DEPOT_CODES) if (re.test(s)) return code
+  return null
+}
+
 const depotName = (s) => {
   s = text(clean(s))
   if (!s) return null
-  if (/บางปะกง/.test(s)) return 'BPK'
-  return s
+  return knownDepot(s) || s
 }
-// "โหลดคลังพิจิตร" -> "พิจิตร"
+// "โหลดคลังพิจิตร" -> "PCT"
 const depotFromNote = (s) => {
   const m = text(s)?.match(/โหลด(?:ที่)?คลัง\s*([^\s/,]+)/)
   return m ? depotName(m[1]) : null
@@ -167,9 +183,9 @@ const depotFromNote = (s) => {
 // Guess the depot code from a file name or sheet title.
 export function guessDepot(...texts) {
   const s = texts.filter(Boolean).join(' ')
-  if (/BPK|บางปะกง/i.test(s)) return 'BPK'
+  const code = knownDepot(s)
+  if (code) return code
   if (/VEHICLE_REGISTRATION|CUSTOMER_SHIPTO/i.test(s)) return 'SRC' // SRC's OrderUpdate export layout
-  for (const code of ['BRP', 'SRC', 'SCN']) if (new RegExp(code, 'i').test(s)) return code
   return ''
 }
 

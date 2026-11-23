@@ -1,4 +1,5 @@
 import { fetchProtectedJson } from './protectedFetch'
+import { knownDepot } from './planConvert'
 
 // Distance database (Google Sheet, every tab) -> apps-script/distance-db.gs. Answers signed-in users only.
 const DISTANCE_URL =
@@ -48,14 +49,12 @@ function buildIndex(rows) {
   return { byName, count: rows.length }
 }
 
-// The depot code the plan uses (BPK, SRC, BSRC, …) for a distance row.
-// "คลังก๊าซบางปะกง" -> BPK · "คลัง บางจาก ศรีราชา BSRC" -> BSRC · depot = tab "Atlas-SRC" -> SRC
+// The depot code the plan uses for a distance row (see knownDepot in planConvert.js).
+// "คลังก๊าซบางปะกง" -> BPK · "คลัง บางจาก ศรีราชา BSRC" -> BSRC · "คลังพิจิตร" -> PCT
+// "คลังนครสวรรค์" -> PTT NSW · depot = tab "Atlas-SRC" -> SRC. The depot column wins over the tab name.
 export function depotCode(depot, sheet) {
-  const s = `${depot ?? ''} ${sheet ?? ''}`
-  if (/บางปะกง/.test(s)) return 'BPK'
-  const code = s.match(/(BSRC|BPK|BRP|SRC|SCN)/i)
-  if (code) return code[1].toUpperCase()
-  return String(depot ?? '').replace(/^\s*คลัง\s*/, '').trim() || null
+  return knownDepot(depot) || knownDepot(sheet)
+    || String(depot ?? '').replace(/^\s*คลัง\s*/, '').trim() || null
 }
 
 // Distance (and the depot it is from) for a customer -> { distance, depot } or null.
@@ -65,9 +64,10 @@ export function findMatch(index, customer, depot) {
   const list = index?.byName.get(normName(customer))
   if (!list?.length) return null
   const d = normDepot(depot)
+  const want = knownDepot(depot) // "PCT" in the plan matches "คลังพิจิตร" in the sheet
   if (d) {
     // Tab "Atlas-BPK" belongs to depot BPK, "Atlas-SRC" to SRC.
-    const same = list.find((x) => x.depot === d || x.sheet === d || x.depot.includes(d) || x.sheet.includes(d)
+    const same = list.find((x) => (want && x.code === want) || x.depot === d || x.sheet === d || x.depot.includes(d) || x.sheet.includes(d)
       || (x.depot && d.includes(x.depot)))
     if (same) return { distance: same.distance, depot: same.code }
   }
