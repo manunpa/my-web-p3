@@ -138,7 +138,11 @@ export function toRecords(rows) {
       cause: get(row, 'cause') || '(ไม่ระบุ)',
       status: get(row, 'status'),
       maxSpeed: num(get(row, 'maxSpeed')),
+      startSpeed: num(get(row, 'startSpeed')),
+      endSpeed: num(get(row, 'endSpeed')),
+      gforce: num(get(row, 'gforce')),
       nearMiss: !!nm && !NO.test(nm),
+      nearMissKnown: !!nm, // the Near miss cell was filled in (yes or no)
       vr,
       responded: !!vr && !NO.test(vr),
       vrid: get(row, 'vrid'),

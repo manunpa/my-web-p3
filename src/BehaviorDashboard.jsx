@@ -4,6 +4,10 @@ import {
   ChevronDown, ExternalLink, Building2,
 } from 'lucide-react'
 import { loadBehavior, BEHAVIOR_API_URL, REFRESH_MS } from './behaviorData'
+import {
+  repeats, penaltyEffect, penaltyByUnit, riskScores, nearMissByOffense, causeMatrix, fatigue, harshEvents,
+} from './behaviorInsights'
+import { BehaviorInsights } from './BehaviorInsightsPanels'
 import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, MonthBars, Empty, nf } from './charts'
 import {
   DAY, times, dShort, dDay, dTime, hm, startOfDay, pctChange, countBy, toInput, rangeFor, monthly,
@@ -386,6 +390,26 @@ export default function BehaviorDashboard() {
   const range = useMemo(() => rangeFor(scoped, period, custom), [scoped, period, custom])
   const data = useMemo(() => analyse(scoped, range, behaviorSplit), [scoped, range, behaviorSplit])
   const months = useMemo(() => monthly(scoped, responseSplit, range), [scoped, range])
+  // Extra analyses (src/behaviorInsights.js). "dated" (all units) is used where a driver's whole
+  // history matters: re-offending after a penalty and days since the last record.
+  const insights = useMemo(() => {
+    if (!data || !range) return null
+    const { from, to, kind } = range
+    const len = to - from
+    const prev = kind === 'all' ? null : scoped.filter((r) => r.start >= from - len && r.start < from)
+    const rows = data.rows
+    return {
+      compare: prev ? (period !== 'custom' && period !== 'all' ? `${period} วันก่อนหน้า` : 'ช่วงก่อนหน้าที่ยาวเท่ากัน') : null,
+      repeats: repeats(rows),
+      effect: penaltyEffect(dated, rows),
+      unitPenalty: penaltyByUnit(rows),
+      scores: riskScores(dated, rows, prev),
+      nearMiss: nearMissByOffense(rows),
+      causes: causeMatrix(rows),
+      fatigue: fatigue(rows),
+      harsh: harshEvents(rows),
+    }
+  }, [data, range, scoped, dated, period])
   const animKey = `${range?.from}:${range?.to}:${state.at?.getTime()}:${unit}`
 
   const choose = (id) => {
@@ -550,8 +574,10 @@ export default function BehaviorDashboard() {
                 </Panel>
               )}
 
+              {insights && <BehaviorInsights d={insights} compare={insights.compare} i0={14} />}
+
               <div className="span-3" ref={tableRef}>
-                <Panel i={14} title="รายการบันทึกพฤติกรรม" note={unit ? `เฉพาะ ${unit} · เรียงจากล่าสุด` : 'เรียงจากล่าสุด (รอตอบกลับ: เรียงจากค้างนานสุด)'}
+                <Panel i={22} title="รายการบันทึกพฤติกรรม" note={unit ? `เฉพาะ ${unit} · เรียงจากล่าสุด` : 'เรียงจากล่าสุด (รอตอบกลับ: เรียงจากค้างนานสุด)'}
                   actions={unit && <button type="button" className="more" onClick={() => setUnit('')}>ดูทุกหน่วยงาน</button>}>
                   <BehaviorTable rows={data.rows} headers={state.headers} />
                 </Panel>
