@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Upload, FileSpreadsheet, Download, X, AlertTriangle, Loader2, Plus, Trash2, RotateCcw, Route, RefreshCw,
 } from 'lucide-react'
-import { loadDistances, findDistance } from './distanceData'
+import { loadDistances, findDistance, findMatch } from './distanceData'
 import {
   OUT_HEAD, readBook, readSheet, pickSheet, sheetDate, guessDepot, convertSheet, toRows, numberRows,
   writeXlsx, fmtYmd, toInputDate, fromInputDate,
@@ -102,18 +102,26 @@ export default function DocumentsPage() {
       .filter((r) => !removed.has(r.key))
       .map((r) => {
         const cells = r.cells.map((v, c) => (edits[r.key] && c in edits[r.key] ? edits[r.key][c] : v))
+        const empty = (c) => cells[c] == null || cells[c] === ''
+        const typed = (c) => edits[r.key] && c in edits[r.key]
+        // Empty depot on a trip's first row -> the depot the distance database found this customer at.
+        let autoDepot = false
+        if (r.start && empty(3) && !typed(3) && dist.index) {
+          const hit = findMatch(dist.index, cells[4], null)
+          if (hit?.depot) { cells[3] = hit.depot; autoDepot = true }
+        }
         if (r.start) depot = cells[3]
         // Empty distance -> fill from the distance database (a typed value always wins).
         let autoKm = false
-        const typed = edits[r.key] && 6 in edits[r.key]
-        if (!typed && (cells[6] == null || cells[6] === '') && dist.index) {
+        if (!typed(6) && empty(6) && dist.index) {
           const km = findDistance(dist.index, cells[4], depot)
           if (km != null) { cells[6] = km; autoKm = true }
         }
-        return { ...r, added: r.key.startsWith('n'), cells, autoKm }
+        return { ...r, added: r.key.startsWith('n'), cells, autoKm, autoDepot }
       })
   }, [base, added, removed, edits, dist.index])
   const kmFilled = table.filter((r) => r.autoKm).length
+  const depotFilled = table.filter((r) => r.autoDepot).length
   const kmMissing = table.filter((r) => r.cells[4] && (r.cells[6] == null || r.cells[6] === '')).length
   const rows = useMemo(() => numberRows(table), [table])
   const drops = rows.length
@@ -239,7 +247,10 @@ export default function DocumentsPage() {
               <Route size={14} />
               {dist.status === 'loading' && 'กำลังโหลดฐานข้อมูลระยะทาง…'}
               {dist.status === 'ready' && (
-                <>ระยะทาง: เติมจากฐานข้อมูล {kmFilled} จุด{kmMissing > 0 && ` · ไม่พบ ${kmMissing} จุด (กรอกเองได้)`}</>
+                <>
+                  ระยะทาง: เติมจากฐานข้อมูล {kmFilled} จุด{kmMissing > 0 && ` · ไม่พบ ${kmMissing} จุด (กรอกเองได้)`}
+                  {depotFilled > 0 && ` · เติมคลังต้นทาง ${depotFilled} เที่ยว`}
+                </>
               )}
               {dist.status === 'error' && `โหลดฐานข้อมูลระยะทางไม่ได้: ${dist.error}`}
               {dist.status !== 'loading' && (
@@ -262,7 +273,7 @@ export default function DocumentsPage() {
                         {rows[i].map((v, c) => (c === 0 || c === 12 ? (
                           <td key={c} className="auto">{v ?? ''}</td>
                         ) : (
-                          <td key={c} className={edits[r.key] && c in edits[r.key] ? 'edited' : c === 6 && r.autoKm ? 'auto-km' : ''}>
+                          <td key={c} className={edits[r.key] && c in edits[r.key] ? 'edited' : (c === 6 && r.autoKm) || (c === 3 && r.autoDepot) ? 'auto-km' : ''}>
                             <input
                               value={v ?? ''}
                               size={COL_SIZE[c]}

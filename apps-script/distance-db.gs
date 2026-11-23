@@ -34,7 +34,9 @@ const DIST_HEADERS = {
   depot: /คลัง|ต้นทาง|depot|origin|plant/i,
   customer: /ลูกค้า|ปลายทาง|customer|ship.?to|destination/i,
   distance: /ระยะ|กม|km|distance/i,
-  notDistance: /ชื่อ|name/i, // "ชื่อลูกค้า (ไฟล์ระยะทาง)" มีคำว่าระยะ แต่ไม่ใช่คอลัมน์ระยะทาง
+  // ไม่ใช่คอลัมน์ระยะทาง แม้มีคำว่าระยะ: "ชื่อลูกค้า (ไฟล์ระยะทาง)",
+  // "ลำดับ | สีเขียว = ระยะทางเติมจาก ..." (เป็นเลขลำดับ 1, 2, 3 ...)
+  notDistance: /ชื่อ|name|ลำดับ|รหัส|^no\b|seq/i,
 }
 
 function doGet() {
@@ -136,6 +138,14 @@ function testData() {
   Logger.log('รวมทั้งหมด: ' + out.count + ' แถว จาก ' + out.sheets.length + ' แท็บ')
   out.sheets.forEach((s) => Logger.log('แท็บ ' + s.sheet + ': ' + s.count + ' แถว · คอลัมน์ ' + JSON.stringify(s.headers)))
   if (out.skipped.length) Logger.log('ข้าม (ไม่มีหัวคอลัมน์ลูกค้า + ระยะทาง): ' + out.skipped.join(', '))
+  // แท็บที่ถูกข้าม: แสดงข้อความใน 10 แถวแรก จะได้เห็นว่าหัวคอลัมน์จริงชื่ออะไร
+  out.skipped.forEach((tab) => {
+    const values = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(tab).getDataRange().getDisplayValues()
+    for (let i = 0; i < Math.min(values.length, 10); i++) {
+      const cells = values[i].map((v, c) => (String(v).trim() ? String.fromCharCode(65 + (c % 26)) + ':' + String(v).trim() : '')).filter(String)
+      if (cells.length) Logger.log('  ' + tab + ' แถว ' + (i + 1) + ' → ' + cells.join(' | '))
+    }
+  })
   const names = SpreadsheetApp.getActiveSpreadsheet().getSheets().map((s) => s.getName().trim())
   Object.keys(DIST_CUSTOMER_COLUMN).forEach((tab) => {
     if (names.indexOf(tab) < 0) Logger.log('⚠ ไม่พบแท็บ ' + tab + ' (ชื่อใน DIST_CUSTOMER_COLUMN ต้องตรงกับชื่อแท็บ)')

@@ -41,14 +41,27 @@ function buildIndex(rows) {
     const km = Number(r.distance)
     if (!key || !Number.isFinite(km)) continue
     if (!byName.has(key)) byName.set(key, [])
-    byName.get(key).push({ depot: normDepot(r.depot), sheet: normDepot(r.sheet), distance: km })
+    byName.get(key).push({
+      depot: normDepot(r.depot), sheet: normDepot(r.sheet), distance: km, code: depotCode(r.depot, r.sheet),
+    })
   }
   return { byName, count: rows.length }
 }
 
-// Distance for a customer from a depot. Prefers a row of the same depot (or a tab named after it);
-// without a depot match it is used only when every row for that customer gives the same distance.
-export function findDistance(index, customer, depot) {
+// The depot code the plan uses (BPK, SRC, BSRC, …) for a distance row.
+// "คลังก๊าซบางปะกง" -> BPK · "คลัง บางจาก ศรีราชา BSRC" -> BSRC · depot = tab "Atlas-SRC" -> SRC
+export function depotCode(depot, sheet) {
+  const s = `${depot ?? ''} ${sheet ?? ''}`
+  if (/บางปะกง/.test(s)) return 'BPK'
+  const code = s.match(/(BSRC|BPK|BRP|SRC|SCN)/i)
+  if (code) return code[1].toUpperCase()
+  return String(depot ?? '').replace(/^\s*คลัง\s*/, '').trim() || null
+}
+
+// Distance (and the depot it is from) for a customer -> { distance, depot } or null.
+// Prefers a row of the same depot (or a tab named after it); without a depot match it is used
+// only when every row for that customer gives the same distance.
+export function findMatch(index, customer, depot) {
   const list = index?.byName.get(normName(customer))
   if (!list?.length) return null
   const d = normDepot(depot)
@@ -56,7 +69,14 @@ export function findDistance(index, customer, depot) {
     // Tab "Atlas-BPK" belongs to depot BPK, "Atlas-SRC" to SRC.
     const same = list.find((x) => x.depot === d || x.sheet === d || x.depot.includes(d) || x.sheet.includes(d)
       || (x.depot && d.includes(x.depot)))
-    if (same) return same.distance
+    if (same) return { distance: same.distance, depot: same.code }
   }
-  return list.every((x) => x.distance === list[0].distance) ? list[0].distance : null
+  if (!list.every((x) => x.distance === list[0].distance)) return null
+  // Same distance everywhere: name the depot only when every row agrees on it.
+  const codes = new Set(list.map((x) => x.code))
+  return { distance: list[0].distance, depot: codes.size === 1 ? list[0].code : null }
+}
+
+export function findDistance(index, customer, depot) {
+  return findMatch(index, customer, depot)?.distance ?? null
 }
