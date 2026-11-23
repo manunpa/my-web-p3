@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, Upload, FileSpreadsheet, Download, X, AlertTriangle, Loader2, Plus, Trash2, RotateCcw,
+  ArrowLeft, Upload, FileSpreadsheet, Download, X, AlertTriangle, Loader2, Plus, Trash2, RotateCcw, Route, RefreshCw,
 } from 'lucide-react'
+import { loadDistances, findDistance } from './distanceData'
 import {
   OUT_HEAD, readBook, readSheet, pickSheet, sheetDate, guessDepot, convertSheet, toRows, numberRows,
   writeXlsx, fmtYmd, toInputDate, fromInputDate,
@@ -73,6 +74,18 @@ export default function DocumentsPage() {
     [files, results],
   )
 
+  // Distance database, loaded once when the first file is added.
+  const [dist, setDist] = useState({ status: 'idle', index: null, error: null })
+  const fetchDist = (force) => {
+    setDist((d) => ({ ...d, status: 'loading', error: null }))
+    loadDistances(force)
+      .then((index) => setDist({ status: 'ready', index, error: null }))
+      .catch((e) => setDist((d) => ({ ...d, status: 'error', error: e.message })))
+  }
+  useEffect(() => {
+    if (files.length && dist.status === 'idle') fetchDist(false)
+  }, [files.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Changes made in the table. They are kept by row key, so they survive changing another file's settings.
   const [edits, setEdits] = useState({}) // key -> { column: value }
   const [added, setAdded] = useState([]) // { key, after, start, cells }
@@ -84,10 +97,24 @@ export default function DocumentsPage() {
       const at = list.findIndex((r) => r.key === a.after)
       list.splice(at < 0 ? list.length : at + 1, 0, a)
     }
+    let depot = null // the depot of the trip a row belongs to
     return list
       .filter((r) => !removed.has(r.key))
-      .map((r) => ({ ...r, added: r.key.startsWith('n'), cells: r.cells.map((v, c) => (edits[r.key] && c in edits[r.key] ? edits[r.key][c] : v)) }))
-  }, [base, added, removed, edits])
+      .map((r) => {
+        const cells = r.cells.map((v, c) => (edits[r.key] && c in edits[r.key] ? edits[r.key][c] : v))
+        if (r.start) depot = cells[3]
+        // Empty distance -> fill from the distance database (a typed value always wins).
+        let autoKm = false
+        const typed = edits[r.key] && 6 in edits[r.key]
+        if (!typed && (cells[6] == null || cells[6] === '') && dist.index) {
+          const km = findDistance(dist.index, cells[4], depot)
+          if (km != null) { cells[6] = km; autoKm = true }
+        }
+        return { ...r, added: r.key.startsWith('n'), cells, autoKm }
+      })
+  }, [base, added, removed, edits, dist.index])
+  const kmFilled = table.filter((r) => r.autoKm).length
+  const kmMissing = table.filter((r) => r.cells[4] && (r.cells[6] == null || r.cells[6] === '')).length
   const rows = useMemo(() => numberRows(table), [table])
   const drops = rows.length
   const tripCount = table.filter((r, i) => r.start || i === 0).length
@@ -207,6 +234,19 @@ export default function DocumentsPage() {
               คลิกช่องเพื่อแก้ไข · <Plus size={12} /> เพิ่มจุดส่งใต้แถวนั้น · <Trash2 size={12} /> ลบแถว (ลบแถวแรกของเที่ยว = ลบทั้งเที่ยว)
               · ลำดับและ TRIP_DROP นับให้อัตโนมัติ
             </p>
+            <p className={`conv-km${dist.status === 'error' ? ' bad' : ''}`}>
+              <Route size={14} />
+              {dist.status === 'loading' && 'กำลังโหลดฐานข้อมูลระยะทาง…'}
+              {dist.status === 'ready' && (
+                <>ระยะทาง: เติมจากฐานข้อมูล {kmFilled} จุด{kmMissing > 0 && ` · ไม่พบ ${kmMissing} จุด (กรอกเองได้)`}</>
+              )}
+              {dist.status === 'error' && `โหลดฐานข้อมูลระยะทางไม่ได้: ${dist.error}`}
+              {dist.status !== 'loading' && (
+                <button type="button" onClick={() => fetchDist(true)} title="โหลดฐานข้อมูลระยะทางใหม่">
+                  <RefreshCw size={12} /> โหลดใหม่
+                </button>
+              )}
+            </p>
             {drops > 0 && (
               <div className="table-scroll">
                 <table className="orders conv-table">
@@ -221,7 +261,7 @@ export default function DocumentsPage() {
                         {rows[i].map((v, c) => (c === 0 || c === 12 ? (
                           <td key={c} className="auto">{v ?? ''}</td>
                         ) : (
-                          <td key={c} className={edits[r.key] && c in edits[r.key] ? 'edited' : ''}>
+                          <td key={c} className={edits[r.key] && c in edits[r.key] ? 'edited' : c === 6 && r.autoKm ? 'auto-km' : ''}>
                             <input
                               value={v ?? ''}
                               size={COL_SIZE[c]}

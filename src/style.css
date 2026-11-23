@@ -493,3 +493,8 @@ input[type=date],input[type=datetime-local],input[type=time],input[type=month]{m
 .conv-row-act button{display:inline-grid;place-items:center;width:26px;height:26px;margin-right:2px;border-radius:7px;border:1px solid transparent;background:none;color:var(--muted);cursor:pointer}
 .conv-row-act button:hover{border-color:var(--gold-text);color:var(--gold-text)}
 .conv-row-act button.del:hover{border-color:var(--err);color:var(--err)}
+.conv-km{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 10px;font-size:12px;color:var(--muted)}
+.conv-km svg{stroke:var(--gold-text)}.conv-km.bad{color:var(--err)}.conv-km.bad svg{stroke:var(--err)}
+.conv-km button{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:7px;border:1px solid var(--line);background:none;color:var(--muted);font:inherit;font-size:11px;cursor:pointer}
+.conv-km button:hover{border-color:var(--gold-text);color:var(--text)}
+.conv-table td.auto-km input{color:var(--ok)}
