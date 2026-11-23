@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
-import { Panel, HourBars, Empty, nf } from './charts'
+import { Panel, HourBars, HourHeat, Empty, nf } from './charts'
 import { times, dTime } from './dashShared'
 import {
   PENALTY_STEPS, MIN_JUDGED, WINDOWS, stepLabel, penaltyBeforeAfter, penalizedDrivers, driverTimeline,
@@ -200,7 +200,7 @@ function Effect({ rows, all, inRange }) {
       <p className="muted share-note">
         เทียบจำนวนบันทึกของ พขร. คนเดิมใน {w} วันก่อนกับ {w} วันหลังวันที่เกิดเหตุที่ได้รับผลนั้น จึงไม่โดนผลจาก "คนที่ผิดบ่อยมักโดนโทษหนัก"
         · แถว "ไม่มีความผิด" คือการเปลี่ยนแปลงเมื่อไม่มีโทษ ใช้เป็นเกณฑ์เทียบ{base?.change !== null && base ? ` (${base.change > 0 ? '▲' : '▼'} ${Math.abs(base.change).toFixed(0)}%)` : ''}
-        · นับเฉพาะเคสที่มีข้อมูลครบทั้งก่อนและหลัง · จำนวนน้อยกว่า 10 ใช้ดูแนวโน้มเท่านั้น
+        {' '}· นับเฉพาะเคสที่มีข้อมูลครบทั้งก่อนและหลัง · จำนวนน้อยกว่า 10 ใช้ดูแนวโน้มเท่านั้น
       </p>
 
       <h4 className="beh-h4">2. มีบันทึกใหม่ภายในกี่วันหลังได้รับผล</h4>
@@ -263,6 +263,132 @@ function Fatigue({ f }) {
       </div>
       <div>{f.timed ? <HourBars counts={f.hours} format={times} /> : <Empty>ไม่มีเวลาเกิดเหตุ</Empty>}</div>
     </div>
+  )
+}
+
+/* 4b-4g. fatigue, in more detail */
+function NonCoop({ c }) {
+  const [limit, setLimit] = useState(8)
+  if (!c.list.length) return <Empty>ไม่มีเคสง่วงแล้วไม่ยอมหยุดพักในช่วงนี้</Empty>
+  return (
+    <>
+      {c.noOffense > 0 && (
+        <p className="beh-warn"><AlertTriangle size={14} />
+          <span>{nf.format(c.noOffense)} จาก {nf.format(c.list.length)} เคส พิจารณาเป็น "ไม่มีความผิด" ทั้งที่ พขร. ไม่ให้ความร่วมมือหยุดพัก</span>
+        </p>
+      )}
+      <ul className="mini-list nc-out">
+        {c.outcomes.map((o) => <li key={o.name}><span>{o.name}</span><b>{nf.format(o.value)}</b><small>{pct((o.value / c.list.length) * 100)}</small></li>)}
+      </ul>
+      {c.repeat.length > 0 && (
+        <>
+          <h4 className="beh-h4">ไม่ยอมหยุดพักซ้ำ ({nf.format(c.repeat.length)} คน)</h4>
+          <ul className="mini-list">
+            {c.repeat.slice(0, 8).map((d) => <li key={d.name}><span>{d.name} · {d.unit}</span><b>{nf.format(d.value)} ครั้ง</b><small /></li>)}
+          </ul>
+        </>
+      )}
+      <h4 className="beh-h4">รายการเคส</h4>
+      <div className="table-scroll">
+        <table className="orders insight">
+          <thead><tr><th>วันที่</th><th>พขร.</th><th>หน่วยงาน</th><th>ผลพิจารณา</th></tr></thead>
+          <tbody>
+            {c.list.slice(0, limit).map((r) => (
+              <tr key={r.id}>
+                <td className="nowrap">{dTime(r.start)}</td>
+                <td className="nowrap">{r.driver}</td>
+                <td className="nowrap">{r.unit}</td>
+                <td className="nowrap">{r.step !== null && <i className="dot" style={{ background: STEP_COLORS[r.step] }} />}
+                  <span className={r.step === null ? 'muted' : ''}>{r.outcome}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {limit < c.list.length && (
+        <div className="table-foot"><span className="muted">แสดง {limit} จาก {nf.format(c.list.length)} เคส</span>
+          <button type="button" className="more" onClick={() => setLimit((l) => l + 20)}>แสดงเพิ่ม</button></div>
+      )}
+    </>
+  )
+}
+
+function FatigueRepeats({ rows }) {
+  if (!rows.length) return <Empty>ไม่มี พขร. ที่ง่วงซ้ำในช่วงนี้</Empty>
+  return (
+    <>
+      <div className="table-scroll">
+        <table className="orders insight">
+          <thead><tr><th>พขร.</th><th className="num">ครั้ง</th><th className="num">ไม่ยอมพัก</th><th className="num">ห่างกัน (ค่ากลาง)</th><th className="num">ซ้ำใน 7 วัน</th><th>ล่าสุด</th></tr></thead>
+          <tbody>
+            {rows.map((d, i) => (
+              <tr key={d.name} style={{ '--i': Math.min(i, 12) }}>
+                <td className="nowrap">{d.name}<small>{d.unit}</small></td>
+                <td className="num"><b>{nf.format(d.count)}</b></td>
+                <td className="num">{d.refused ? <b className="warn-num">{d.refused}</b> : <span className="muted">0</span>}</td>
+                <td className="num nowrap">{Math.round(d.medianGap)} วัน<small>สั้นสุด {Math.round(d.minGap)} วัน</small></td>
+                <td className="num">{nf.format(d.within7)}</td>
+                <td className="nowrap muted">{dTime(d.last)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted share-note">ใช้คัด พขร. ไปตรวจสุขภาพการนอน หรือทบทวนตารางงาน · "ห่างกัน" = จำนวนวันระหว่างแต่ละครั้ง</p>
+    </>
+  )
+}
+
+function FatigueUnits({ rows }) {
+  if (!rows.length) return <Empty>ไม่มีหน่วยงานที่มีบันทึกพอ (≥ 20)</Empty>
+  const max = Math.max(1, ...rows.map((u) => u.rate))
+  return (
+    <>
+      <ul className="mini-bars fu">
+        {rows.slice(0, 12).map((u) => (
+          <li key={u.name} title={`${u.name}: ${u.value} จาก ${u.total} บันทึก`}>
+            <span>{u.name}</span>
+            <span className="cell-bar"><i style={{ width: `${(u.rate / max) * 100}%` }} /></span>
+            <b>{pct(u.rate)}</b>
+            <small>{u.value}/{u.total}</small>
+          </li>
+        ))}
+      </ul>
+      <p className="muted share-note">% ของบันทึกในหน่วยงานนั้นที่เป็นเรื่องความเหนื่อยล้า · เฉพาะหน่วยงานที่มีอย่างน้อย 20 บันทึก</p>
+    </>
+  )
+}
+
+function FatigueMonths({ months }) {
+  const max = Math.max(1, ...months.map((m) => m.rate ?? 0))
+  return (
+    <ul className="mini-bars weeks">
+      {months.map((m) => (
+        <li key={m.label} title={m.total ? `${m.value} จาก ${m.total} บันทึก` : 'ไม่มีข้อมูล'}>
+          <span>{m.label}</span>
+          <span className="cell-bar"><i style={{ width: `${((m.rate ?? 0) / max) * 100}%` }} /></span>
+          <b>{m.rate === null ? '–' : pct(m.rate)}</b>
+          <small>{m.total ? `${m.value} ครั้ง` : ''}</small>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function FatiguePlaces({ rows }) {
+  if (!rows.length) return <Empty />
+  const max = rows[0].value
+  return (
+    <ul className="mini-bars fu">
+      {rows.map((p) => (
+        <li key={p.name} title={`${p.name}: ${p.value} เคส จาก ${p.drivers} คน`}>
+          <span>{p.name}</span>
+          <span className="cell-bar"><i style={{ width: `${(p.value / max) * 100}%` }} /></span>
+          <b>{nf.format(p.value)}</b>
+          <small>{p.drivers} คน</small>
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -415,6 +541,24 @@ export function BehaviorInsights({ d, compare, i0 }) {
       </Panel>
       <Panel className="span-3" i={i0 + 7} title="ความเหนื่อยล้า" note="ง่วง เมื่อยล้า ขับต่อเนื่องเกิน 4 ชม. · แยกตามชั่วโมงที่เกิดเหตุ">
         <Fatigue f={d.fatigue} />
+      </Panel>
+      <Panel className="span-2" i={i0 + 8} title="ง่วงแล้วไม่ยอมหยุดพัก" note="ชนิดความผิด: ง่วง/เมื่อยล้า และไม่ให้ความร่วมมือ">
+        <NonCoop c={d.nonCoop} />
+      </Panel>
+      <Panel i={i0 + 9} title="ความเหนื่อยล้าต่อหน่วยงาน" note="เทียบเป็น % ของบันทึกในหน่วยงานเดียวกัน">
+        <FatigueUnits rows={d.fatigueUnits} />
+      </Panel>
+      <Panel className="span-2" i={i0 + 10} title="พขร. ที่ง่วงซ้ำ" note="มีบันทึกเรื่องความเหนื่อยล้า 2 ครั้งขึ้นไปในช่วงที่เลือก (15 อันดับ)">
+        <FatigueRepeats rows={d.fatigueRepeats} />
+      </Panel>
+      <Panel i={i0 + 11} title="แนวโน้มรายเดือน" note="% ของบันทึกทั้งหมดที่เป็นความเหนื่อยล้า (12 เดือน)">
+        <FatigueMonths months={d.fatigueMonths} />
+      </Panel>
+      <Panel className="span-2" i={i0 + 12} title="ความเหนื่อยล้า: วัน × ช่วงเวลา" note="แต่ละช่อง = จำนวนเคสที่เกิดในวันและชั่วโมงนั้น (สีเข้ม = บ่อย)">
+        <HourHeat rows={d.fatigueWeek} format={times} />
+      </Panel>
+      <Panel i={i0 + 13} title="จุดที่ง่วงบ่อย" note="อำเภอ · จังหวัด ที่เกิดมากสุด 10 อันดับ">
+        <FatiguePlaces rows={d.fatiguePlaces} />
       </Panel>
     </>
   )

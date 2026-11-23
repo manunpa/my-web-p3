@@ -270,6 +270,11 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .tl-dot.high{box-shadow:0 0 0 2px var(--text)}
 .tl-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
 .tl-legend-wait{border:2px dashed var(--muted);background:transparent!important;border-radius:50%}
+.mini-bars.fu li{grid-template-columns:minmax(0,1.3fr) 1fr 44px 52px}
+.mini-bars.fu span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mini-bars.fu small{color:var(--muted);font-size:11px;text-align:right;font-variant-numeric:tabular-nums}
+.nc-out{margin-bottom:6px}
+.warn-num{color:var(--warn-text)}
 .insight .long{color:var(--err);font-weight:600}
 .cell-bar{display:inline-block;width:70px;height:8px;margin-right:8px;border-radius:4px;background:var(--field);overflow:hidden;vertical-align:middle}
 .cell-bar i{display:block;height:100%;border-radius:4px;background:var(--gold)}

@@ -192,6 +192,98 @@ export function fatigue(rows) {
   return { count: list.length, total: rows.length, hours, kinds, night, timed: list.filter((r) => r.hasTime).length }
 }
 
+/* 4b. Drowsy and refused to stop ("...และไม่ให้ความร่วมมือ"): every case, its outcome, and drivers
+       who did it more than once. Judging these as "no offense" is flagged. */
+const NON_COOP = /ไม่ให้ความร่วมม/
+export function nonCooperation(rows) {
+  const list = rows.filter((r) => isFatigue(r) && NON_COOP.test(r.offense)).sort((a, b) => b.start - a.start)
+  const outcome = (r) => {
+    const s = penaltyStep(r.penalty)
+    return s === null ? 'รอผล' : stepLabel(s)
+  }
+  const outcomes = [...groupBy(list, outcome)].map(([name, l]) => ({ name, value: l.length }))
+    .sort((a, b) => b.value - a.value)
+  const repeat = [...groupBy(list, 'driver')].filter(([, l]) => l.length >= 2)
+    .map(([name, l]) => ({ name, value: l.length, unit: l[0].unit })).sort((a, b) => b.value - a.value)
+  return {
+    list: list.map((r) => ({ ...r, outcome: outcome(r), step: penaltyStep(r.penalty) })),
+    outcomes,
+    repeat,
+    noOffense: list.filter((r) => penaltyStep(r.penalty) === 0).length,
+  }
+}
+
+/* 4c. Drivers with 2+ fatigue records: count, gaps between them, refusals, last one. */
+export function fatigueRepeats(rows, limit = 15) {
+  return [...groupBy(rows.filter(isFatigue), 'driver')]
+    .filter(([, l]) => l.length >= 2)
+    .map(([name, l]) => {
+      const t = l.map((r) => r.start.getTime()).sort((a, b) => a - b)
+      const gaps = t.slice(1).map((x, i) => (x - t[i]) / DAY).sort((a, b) => a - b)
+      return {
+        name,
+        unit: l[0].unit,
+        count: l.length,
+        refused: l.filter((r) => NON_COOP.test(r.offense)).length,
+        medianGap: gaps[Math.floor(gaps.length / 2)],
+        minGap: gaps[0],
+        within7: gaps.filter((g) => g <= 7).length,
+        last: new Date(t.at(-1)),
+      }
+    })
+    .sort((a, b) => b.count - a.count || a.medianGap - b.medianGap)
+    .slice(0, limit)
+}
+
+/* 4d. Fatigue share of each unit's own records (units with 20+ records in the range). */
+export function fatigueByUnit(rows, min = 20) {
+  return [...groupBy(rows, 'unit')]
+    .filter(([, l]) => l.length >= min)
+    .map(([name, l]) => {
+      const n = l.filter(isFatigue).length
+      return { name, value: n, total: l.length, rate: (n / l.length) * 100 }
+    })
+    .sort((a, b) => b.rate - a.rate)
+}
+
+/* 4e. Day of week x hour for fatigue records (Monday first). */
+const DAYS = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์']
+export function fatigueWeek(rows) {
+  const out = DAYS.map((name) => ({ name, hours: Array(24).fill(0), total: 0 }))
+  for (const r of rows) {
+    if (!isFatigue(r) || !r.hasTime) continue
+    const d = (r.start.getDay() + 6) % 7
+    out[d].hours[r.start.getHours()]++
+    out[d].total++
+  }
+  return out
+}
+
+/* 4f. Where fatigue happens: district + province (province alone when no district). */
+export function fatiguePlaces(rows, limit = 10) {
+  return [...groupBy(rows.filter(isFatigue), (r) => (r.district ? `${r.district} · ${r.province}` : r.province))]
+    .map(([name, l]) => ({ name, value: l.length, drivers: new Set(l.map((r) => r.driver)).size }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limit)
+}
+
+/* 4g. Fatigue share by month, last 12 months (all records in scope, not the range). */
+export function fatigueMonths(records, n = 12) {
+  const now = new Date()
+  const out = []
+  for (let k = n - 1; k >= 0; k--) {
+    const start = new Date(now.getFullYear(), now.getMonth() - k, 1)
+    const end = new Date(now.getFullYear(), now.getMonth() - k + 1, 1)
+    const l = records.filter((r) => r.start >= start && r.start < end)
+    const f = l.filter(isFatigue).length
+    out.push({
+      label: start.toLocaleDateString('th-TH', { month: 'short', year: '2-digit' }),
+      total: l.length, value: f, rate: l.length ? (f / l.length) * 100 : null,
+    })
+  }
+  return out
+}
+
 /* 5. Cause x offense. The cause cell holds long standard sentences; they are grouped by key words. */
 const CAUSES = [
   ['ปัจจัยภายนอก (ฝน พื้นที่แคบ ลูกค้าเร่ง)', /ปัจจัยแทรกแซง|ฝนตก|พื้นที่แคบ|ลูกค้าเร่ง/],

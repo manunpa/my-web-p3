@@ -6,6 +6,7 @@ import {
 import { loadBehavior, BEHAVIOR_API_URL, REFRESH_MS } from './behaviorData'
 import {
   repeats, penaltyEffect, penaltyByUnit, riskScores, nearMissByOffense, causeMatrix, fatigue, harshEvents,
+  nonCooperation, fatigueRepeats, fatigueByUnit, fatigueWeek, fatiguePlaces, fatigueMonths,
 } from './behaviorInsights'
 import { BehaviorInsights } from './BehaviorInsightsPanels'
 import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, MonthBars, Empty, nf } from './charts'
@@ -409,6 +410,12 @@ export default function BehaviorDashboard() {
       nearMiss: nearMissByOffense(rows),
       causes: causeMatrix(rows),
       fatigue: fatigue(rows),
+      nonCoop: nonCooperation(rows),
+      fatigueRepeats: fatigueRepeats(rows),
+      fatigueUnits: fatigueByUnit(rows),
+      fatigueWeek: fatigueWeek(rows),
+      fatiguePlaces: fatiguePlaces(rows),
+      fatigueMonths: fatigueMonths(scoped),
       harsh: harshEvents(rows),
     }
   }, [data, range, scoped, dated, period])
@@ -579,7 +586,7 @@ export default function BehaviorDashboard() {
               {insights && <BehaviorInsights d={insights} compare={insights.compare} i0={14} />}
 
               <div className="span-3" ref={tableRef}>
-                <Panel i={22} title="รายการบันทึกพฤติกรรม" note={unit ? `เฉพาะ ${unit} · เรียงจากล่าสุด` : 'เรียงจากล่าสุด (รอตอบกลับ: เรียงจากค้างนานสุด)'}
+                <Panel i={28} title="รายการบันทึกพฤติกรรม" note={unit ? `เฉพาะ ${unit} · เรียงจากล่าสุด` : 'เรียงจากล่าสุด (รอตอบกลับ: เรียงจากค้างนานสุด)'}
                   actions={unit && <button type="button" className="more" onClick={() => setUnit('')}>ดูทุกหน่วยงาน</button>}>
                   <BehaviorTable rows={data.rows} headers={state.headers} />
                 </Panel>
