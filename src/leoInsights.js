@@ -153,7 +153,60 @@ export function rejected(rows) {
       })
       .filter((p) => p.total >= 5)
       .sort((a, b) => b.rate - a.rate || b.total - a.total),
+    list: [...rej].sort((a, b) => b.start - a.start),
   }
+}
+
+/* 6b. Do the unlockers judge the same stop type the same way?
+       cells[type][person] = { rejected, total, rate }. A type is flagged when, among people with at
+       least MIN_DECIDED decided cases of it, one rejects >= 50% while another rejects none. */
+export const MIN_DECIDED = 5
+
+export function rejectMatrix(rows) {
+  const decided = rows.filter((r) => (r.stage === 'rejected' || r.stage === 'approved') && r.releasedBy)
+  const rejectedTypes = new Set(decided.filter((r) => r.stage === 'rejected').map((r) => r.stopType))
+  const people = [...groupBy(decided, 'releasedBy')]
+    .filter(([, list]) => list.length >= MIN_DECIDED)
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([name]) => name)
+  const types = [...rejectedTypes]
+    .map((t) => ({ name: t, list: decided.filter((r) => r.stopType === t) }))
+    .sort((a, b) => b.list.filter((r) => r.stage === 'rejected').length - a.list.filter((r) => r.stage === 'rejected').length)
+  const out = types.map(({ name, list }) => {
+    const cells = Object.fromEntries(people.map((p) => {
+      const mine = list.filter((r) => r.releasedBy === p)
+      const n = mine.filter((r) => r.stage === 'rejected').length
+      return [p, { rejected: n, total: mine.length, rate: mine.length ? (n / mine.length) * 100 : null }]
+    }))
+    const solid = people.filter((p) => cells[p].total >= MIN_DECIDED)
+    const strict = solid.filter((p) => cells[p].rate >= 50).sort((a, b) => cells[b].rate - cells[a].rate)
+    const lenient = solid.filter((p) => cells[p].rate === 0)
+    const total = list.length
+    const rej = list.filter((r) => r.stage === 'rejected').length
+    return {
+      name, cells, total, rejected: rej, rate: total ? (rej / total) * 100 : 0,
+      mismatch: strict.length && lenient.length ? { strict, lenient } : null,
+    }
+  })
+  return { people, types: out, mismatches: out.filter((t) => t.mismatch) }
+}
+
+/* 6c. Rejections per week (Monday-Sunday) across the range. */
+export function rejectWeeks(rows, from, to) {
+  const monday = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d }
+  const out = []
+  for (let d = monday(from); d.getTime() < to; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7)) {
+    const end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7)
+    const list = rows.filter((r) => r.start >= d && r.start < end)
+    const decided = list.filter((r) => r.stage === 'rejected' || r.stage === 'approved')
+    const n = list.filter((r) => r.stage === 'rejected').length
+    const last = new Date(end.getTime() - 86400000)
+    out.push({
+      label: `${d.getDate()} ${d.toLocaleDateString('th-TH', { month: 'short' })}–${last.getDate()} ${last.toLocaleDateString('th-TH', { month: 'short' })}`,
+      rejected: n, total: decided.length, rate: decided.length ? (n / decided.length) * 100 : null,
+    })
+  }
+  return out
 }
 
 /* 7. Day of week x hour of the start. Rows Monday..Sunday. */

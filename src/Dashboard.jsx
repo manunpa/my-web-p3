@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Bell, ShieldAlert, XCircle, Timer, RefreshCw, Search,
   CheckCircle2, Clock3, AlertTriangle,
@@ -7,6 +7,7 @@ import { loadAlerts, API_URL, REFRESH_MS } from './fleetData'
 import { STOP_TYPE_NAMES, OTHER_TYPE } from './stopType'
 import {
   hotspots, noise, noiseByMonth, response, stopShares, rejected as rejectedOf, weekHeat, SHORT_MIN,
+  rejectMatrix, rejectWeeks, MIN_DECIDED,
 } from './leoInsights'
 import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, HourHeat, MonthBars, Empty, nf } from './charts'
 import {
@@ -127,7 +128,7 @@ function analyse(records, range, palette, compareLabel) {
     stopTypes, stopHeat, stopAvg,
     hot: { district: hotspots(rows, 'district'), area: hotspots(rows, 'area') }, noise: noise(rows), resp: response(rows),
     shares: { ...stopShares(rows, prev), compare: prev ? (period ? `${period} วันก่อนหน้า` : 'ช่วงก่อนหน้าที่ยาวเท่ากัน') : null },
-    rej: rejectedOf(rows), week: weekHeat(rows),
+    rej: rejectedOf(rows), rejM: rejectMatrix(rows), rejWeeks: rejectWeeks(rows, from, to), week: weekHeat(rows),
     ranks: Object.fromEntries(RANKS.map((k) => [k.id, countBy(rows.filter((r) => k.id !== 'releasedBy' || r.releasedBy), k.id)])),
     kpis: [
       {
@@ -359,6 +360,109 @@ function RejectedPanel({ data }) {
         ))}
       </ul>
     </div>
+  )
+}
+
+// Rejection rate of each stop type by each unlocker. Cells with fewer than MIN_DECIDED cases are
+// shown but not shaded and not used for the mismatch warning: a rate of 1-4 cases says little.
+function Consistency({ m }) {
+  if (!m.types.length) return <Empty>ไม่มีเคสไม่อนุมัติในช่วงนี้</Empty>
+  const cell = (c) => {
+    if (!c.total) return <td key="x" className="num muted">–</td>
+    const solid = c.total >= MIN_DECIDED
+    return (
+      <td className={`num rej-cell${solid ? '' : ' thin'}`}
+        style={solid ? { '--a': 0.08 + 0.62 * (c.rate / 100) } : undefined}
+        title={`${c.rejected} ไม่อนุมัติ จาก ${c.total} เคส${solid ? '' : ' (เคสน้อย ไม่นำมาเทียบ)'}`}>
+        <b>{pct(c.rate)}</b><small>{nf.format(c.rejected)}/{nf.format(c.total)}</small>
+      </td>
+    )
+  }
+  return (
+    <>
+      {m.mismatches.length > 0 ? (
+        <ul className="mismatch">
+          {m.mismatches.map((t) => {
+            const s = t.mismatch.strict.map((p) => `${p} ไม่อนุมัติ ${pct(t.cells[p].rate)} (${t.cells[p].rejected}/${t.cells[p].total})`).join(', ')
+            const l = t.mismatch.lenient.map((p) => `${p} (0/${t.cells[p].total})`).join(', ')
+            return (
+              <li key={t.name}>
+                <AlertTriangle size={15} />
+                <span><b>เกณฑ์ไม่ตรงกัน: {t.name}</b> · {s} แต่ {l} อนุมัติทุกเคส</span>
+              </li>
+            )
+          })}
+        </ul>
+      ) : (
+        <p className="muted mismatch-ok"><CheckCircle2 size={14} /> ไม่พบประเภทที่ผู้ปลดใช้เกณฑ์ต่างกันชัดเจน (เทียบเฉพาะคนที่มี ≥ {MIN_DECIDED} เคสในประเภทนั้น)</p>
+      )}
+      <div className="table-scroll">
+        <table className="orders insight rej-matrix">
+          <thead>
+            <tr><th>ประเภทการจอด</th><th className="num">รวม</th>{m.people.map((p) => <th key={p} className="num">{p}</th>)}</tr>
+          </thead>
+          <tbody>
+            {m.types.map((t) => (
+              <tr key={t.name} className={t.mismatch ? 'flag' : ''}>
+                <td className="nowrap">{t.mismatch && <AlertTriangle size={13} className="flag-ic" />}{t.name}</td>
+                <td className="num"><b>{pct(t.rate)}</b><small>{nf.format(t.rejected)}/{nf.format(t.total)}</small></td>
+                {m.people.map((p) => <Fragment key={p}>{cell(t.cells[p])}</Fragment>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted share-note">
+        ตัวเลข = % ไม่อนุมัติ (ไม่อนุมัติ/เคสที่คนนั้นพิจารณา) · สีเข้ม = ไม่อนุมัติบ่อย · ช่องจาง = น้อยกว่า {MIN_DECIDED} เคส ไม่นำมาเทียบ · แสดงเฉพาะประเภทที่มีเคสไม่อนุมัติ
+      </p>
+    </>
+  )
+}
+
+function RejectWeeks({ weeks }) {
+  const max = Math.max(1, ...weeks.map((w) => w.rejected))
+  if (!weeks.length) return <Empty />
+  return (
+    <ul className="mini-bars weeks">
+      {weeks.map((w) => (
+        <li key={w.label} title={w.total ? `${w.rejected} จาก ${w.total} เคสที่พิจารณา` : 'ไม่มีข้อมูล'}>
+          <span>{w.label}</span>
+          <span className="cell-bar rej"><i style={{ width: `${(w.rejected / max) * 100}%` }} /></span>
+          <b>{nf.format(w.rejected)}</b>
+          <small>{w.rate === null ? '–' : pct(w.rate)}</small>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function RejectList({ rows }) {
+  const [limit, setLimit] = useState(10)
+  useEffect(() => setLimit(10), [rows])
+  if (!rows.length) return <Empty>ไม่มีเคสไม่อนุมัติในช่วงนี้</Empty>
+  return (
+    <>
+      <div className="table-scroll">
+        <table className="orders insight">
+          <thead><tr><th>เริ่ม</th><th>ผู้ปลด</th><th>ประเภท</th><th className="num">รวมเวลา</th><th>สาเหตุที่ปลด</th></tr></thead>
+          <tbody>
+            {rows.slice(0, limit).map((r, i) => (
+              <tr key={r.id} style={{ '--i': Math.min(i, 12) }}>
+                <td className="nowrap">{dTime(r.start)}</td>
+                <td className="nowrap"><b>{r.releasedBy || '–'}</b></td>
+                <td className="nowrap"><span className={`stop-type${r.stopType === OTHER_TYPE ? ' other' : ''}`}>{r.stopType}</span></td>
+                <td className="num nowrap">{fmtMin(r.minutes)}</td>
+                <td className="clip wide" title={r.reason}>{r.reason || '–'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="table-foot">
+        <span className="muted">แสดง {nf.format(Math.min(limit, rows.length))} จาก {nf.format(rows.length)} เคส</span>
+        {limit < rows.length && <button type="button" className="more" onClick={() => setLimit((l) => l + 20)}>แสดงเพิ่ม</button>}
+      </div>
+    </>
   )
 }
 
@@ -650,7 +754,20 @@ export default function Dashboard() {
                 <RejectedPanel data={data.rej} />
               </Panel>
 
-              <Panel className="span-3" i={20} title="รายการแจ้งเตือน" note="เรียงจากล่าสุด">
+              <Panel className="span-3" i={20} title="เกณฑ์การไม่อนุมัติของผู้ปลด แยกตามประเภท"
+                note="ประเภทเดียวกัน ผู้ปลดแต่ละคนไม่อนุมัติกี่ % ใช้ดูว่าทีมใช้เกณฑ์เดียวกันไหม">
+                <Consistency m={data.rejM} />
+              </Panel>
+
+              <Panel className="span-2" i={21} title="รายการเคสไม่อนุมัติ" note="เรียงจากล่าสุด · ดูว่าเคสแบบไหนโดนไม่อนุมัติ">
+                <RejectList rows={data.rej.list} />
+              </Panel>
+
+              <Panel i={22} title="ไม่อนุมัติรายสัปดาห์" note="จำนวนเคส · % ของเคสที่พิจารณาในสัปดาห์นั้น">
+                <RejectWeeks weeks={data.rejWeeks} />
+              </Panel>
+
+              <Panel className="span-3" i={23} title="รายการแจ้งเตือน" note="เรียงจากล่าสุด">
                 <AlertsTable rows={data.rows} />
               </Panel>
             </div>
