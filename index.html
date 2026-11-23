@@ -17,18 +17,18 @@
 <link rel="icon" type="image/svg+xml" href="./favicon.svg">
 <!-- PWA: ติดตั้งเป็นแอปเต็มจอ (Android / iOS / iPadOS) · ไฟล์อยู่ใน public/ -->
 <link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#07070a">
+<meta name="theme-color" content="#f7f4ec">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<!-- แอปธีมมืด + style.css เว้น safe-area ด้านบนไว้แล้ว → ให้เนื้อหาทะลุใต้แถบสถานะ ตัวอักษรขาว -->
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- ธีมเริ่มต้นเป็นโทนสว่าง → แถบสถานะ iOS แบบปกติ (ตัวอักษรดำ) ไม่ใช่ตัวอักษรขาวบนพื้นสว่าง -->
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="SCC Fleet">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <link rel="apple-touch-icon" sizes="152x152" href="./icons/apple-touch-icon-152.png">
 <link rel="apple-touch-icon" sizes="167x167" href="./icons/apple-touch-icon-167.png">
 <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
-<!-- Saved theme (ThemeToggle.jsx), set before first paint so light mode does not flash dark -->
-<script>try{if(localStorage.getItem('theme')==='light')document.documentElement.dataset.theme='light'}catch(e){}</script>
+<!-- Theme (ThemeToggle.jsx): light unless dark was chosen; set before first paint so it does not flash -->
+<script>try{if(localStorage.getItem('theme')!=='dark')document.documentElement.dataset.theme='light'}catch(e){document.documentElement.dataset.theme='light'}</script>
 </head>
 <body>
 <div id="root"></div>

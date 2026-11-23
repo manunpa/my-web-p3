@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
 
-// Dark gold (default) or light. index.html applies the saved choice before the page paints.
+// Light (default) or dark gold. Only an explicit choice is saved; with none saved the page is light.
+// index.html applies the same rule before the page paints.
 const KEY = 'theme'
 
 export function applyTheme(theme) {
@@ -10,7 +11,7 @@ export function applyTheme(theme) {
 }
 
 const saved = () => {
-  try { return localStorage.getItem(KEY) === 'light' ? 'light' : 'dark' } catch { return 'dark' }
+  try { return localStorage.getItem(KEY) === 'dark' ? 'dark' : 'light' } catch { return 'light' }
 }
 
 export default function ThemeToggle() {
