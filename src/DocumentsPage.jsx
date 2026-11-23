@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Upload, FileSpreadsheet, Download, X, AlertTriangle, Loader2, Plus, Trash2, RotateCcw, Route, RefreshCw,
 } from 'lucide-react'
-import { loadDistances, findDistance, findMatch } from './distanceData'
+import { loadDistances, findMatch } from './distanceData'
 import {
   OUT_HEAD, readBook, readSheet, pickSheet, sheetDate, guessDepot, convertSheet, toRows, numberRows,
   writeXlsx, fmtYmd, toInputDate, fromInputDate,
@@ -114,15 +114,18 @@ export default function DocumentsPage() {
         }
         if (r.start) depot = cells[3]
         // Empty distance -> fill from the distance database (a typed value always wins).
+        // A close (not exact) name is flagged with the sheet's name, so it can be checked.
         let autoKm = false
+        let closeTo = null
         if (!typed(6) && empty(6) && dist.index) {
-          const km = findDistance(dist.index, cells[4], depot)
-          if (km != null) { cells[6] = km; autoKm = true }
+          const hit = findMatch(dist.index, cells[4], depot)
+          if (hit) { cells[6] = hit.distance; autoKm = true; if (hit.fuzzy) closeTo = hit.name }
         }
-        return { ...r, added: r.key.startsWith('n'), cells, autoKm, autoDepot }
+        return { ...r, added: r.key.startsWith('n'), cells, autoKm, autoDepot, closeTo }
       })
   }, [base, added, removed, edits, dist.index])
   const kmFilled = table.filter((r) => r.autoKm).length
+  const kmClose = table.filter((r) => r.closeTo).length
   const depotFilled = table.filter((r) => r.autoDepot).length
   const kmMissing = table.filter((r) => r.cells[4] && (r.cells[6] == null || r.cells[6] === '')).length
   const rows = useMemo(() => numberRows(table), [table])
@@ -250,7 +253,9 @@ export default function DocumentsPage() {
               {dist.status === 'loading' && 'กำลังโหลดฐานข้อมูลระยะทาง…'}
               {dist.status === 'ready' && (
                 <>
-                  ระยะทาง: เติมจากฐานข้อมูล {kmFilled} จุด{kmMissing > 0 && ` · ไม่พบ ${kmMissing} จุด (กรอกเองได้)`}
+                  ระยะทาง: เติมจากฐานข้อมูล {kmFilled} จุด
+                  {kmClose > 0 && <span className="conv-close-note"> (ชื่อใกล้เคียง {kmClose} จุด สีส้ม · ชี้ที่ตัวเลขเพื่อดูชื่อในชีท)</span>}
+                  {kmMissing > 0 && ` · ไม่พบ ${kmMissing} จุด (กรอกเองได้)`}
                   {depotFilled > 0 && ` · เติมคลังต้นทาง ${depotFilled} เที่ยว`}
                 </>
               )}
@@ -275,7 +280,13 @@ export default function DocumentsPage() {
                         {rows[i].map((v, c) => (c === 0 || c === 12 ? (
                           <td key={c} className="auto">{v ?? ''}</td>
                         ) : (
-                          <td key={c} className={edits[r.key] && c in edits[r.key] ? 'edited' : (c === 6 && r.autoKm) || (c === 3 && r.autoDepot) ? 'auto-km' : ''}>
+                          <td
+                            key={c}
+                            className={edits[r.key] && c in edits[r.key] ? 'edited'
+                              : c === 6 && r.closeTo ? 'auto-km close'
+                              : (c === 6 && r.autoKm) || (c === 3 && r.autoDepot) ? 'auto-km' : ''}
+                            title={c === 6 && r.closeTo && !(edits[r.key] && 6 in edits[r.key]) ? `ชื่อใกล้เคียง: ใช้ระยะทางของ "${r.closeTo}" ในชีท` : undefined}
+                          >
                             <input
                               value={v ?? ''}
                               size={COL_SIZE[c]}

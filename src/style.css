@@ -498,6 +498,8 @@ input[type=date],input[type=datetime-local],input[type=time],input[type=month]{m
 .conv-km button{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:7px;border:1px solid var(--line);background:none;color:var(--muted);font:inherit;font-size:11px;cursor:pointer}
 .conv-km button:hover{border-color:var(--gold-text);color:var(--text)}
 .conv-table td.auto-km input{color:var(--ok)}
+.conv-table td.auto-km.close input{color:#ea580c;font-weight:600;text-decoration:underline dotted}
+.conv-close-note{color:#ea580c}
 .conv-src{margin-top:14px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--field);font-size:12px}
 .conv-src-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .conv-src-head svg{stroke:var(--gold-text)}.conv-src-head strong{font-size:13px}
