@@ -35,8 +35,8 @@ export default function Home({ user }) {
   return (
     <div className="stage" ref={stage}>
       <main className="card wide in" ref={card}>
-        <h1>Hello <b>{name}</b></h1>
-        <p className="sub">Signed in as {user.email}. Choose where to go next.</p>
+        <h1>SCC <b>Fleet</b></h1>
+        <p className="sub">Signed in as {user.displayName ? `${name} · ${user.email}` : user.email}</p>
 
         <nav className="tiles" aria-label="Main menu">
           {LINKS.map(({ label, hint, icon: Icon, href }, i) => (
