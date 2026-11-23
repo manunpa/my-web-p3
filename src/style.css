@@ -498,3 +498,12 @@ input[type=date],input[type=datetime-local],input[type=time],input[type=month]{m
 .conv-km button{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:7px;border:1px solid var(--line);background:none;color:var(--muted);font:inherit;font-size:11px;cursor:pointer}
 .conv-km button:hover{border-color:var(--gold-text);color:var(--text)}
 .conv-table td.auto-km input{color:var(--ok)}
+.conv-src{margin-top:14px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--field);font-size:12px}
+.conv-src-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.conv-src-head svg{stroke:var(--gold-text)}.conv-src-head strong{font-size:13px}
+.conv-src-head .muted{display:inline-flex;align-items:center;gap:4px}
+.conv-src-head button{margin-left:auto;display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:7px;border:1px solid var(--line);background:none;color:var(--muted);font:inherit;font-size:11px;cursor:pointer}
+.conv-src-head button:hover{border-color:var(--gold-text);color:var(--text)}
+.conv-src ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}
+.conv-src li.warn{display:flex;align-items:center;gap:6px;color:var(--warn-text)}
+.conv-src.bad,.conv-src.bad svg{color:var(--err);stroke:var(--err)}

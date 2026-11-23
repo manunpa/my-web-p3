@@ -12,7 +12,7 @@ export function loadDistances(force = false) {
       if (!json || json.status === 'error' || !Array.isArray(json.rows)) {
         throw new Error((json && (json.message || json.error)) || 'อ่านฐานข้อมูลระยะทางไม่ได้')
       }
-      return buildIndex(json.rows)
+      return { ...buildIndex(json.rows), sheets: json.sheets || [], skipped: json.skipped || [] }
     })
     cached.catch(() => { cached = null }) // let the next try ask again
   }

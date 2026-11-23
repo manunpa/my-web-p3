@@ -74,7 +74,7 @@ export default function DocumentsPage() {
     [files, results],
   )
 
-  // Distance database, loaded once when the first file is added.
+  // Distance database, loaded when the page opens.
   const [dist, setDist] = useState({ status: 'idle', index: null, error: null })
   const fetchDist = (force) => {
     setDist((d) => ({ ...d, status: 'loading', error: null }))
@@ -83,8 +83,8 @@ export default function DocumentsPage() {
       .catch((e) => setDist((d) => ({ ...d, status: 'error', error: e.message })))
   }
   useEffect(() => {
-    if (files.length && dist.status === 'idle') fetchDist(false)
-  }, [files.length]) // eslint-disable-line react-hooks/exhaustive-deps
+    fetchDist(false) // load on page open, so the database can be checked before adding a file
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Changes made in the table. They are kept by row key, so they survive changing another file's settings.
   const [edits, setEdits] = useState({}) // key -> { column: value }
@@ -200,6 +200,7 @@ export default function DocumentsPage() {
             <input value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="เช่น SCC" />
           </label>
           {error && <p className="conv-err"><AlertTriangle size={14} /> {error}</p>}
+          <DistanceSource dist={dist} onReload={() => fetchDist(true)} />
         </section>
 
         {files.length > 0 && (
@@ -282,6 +283,41 @@ export default function DocumentsPage() {
           </section>
         )}
       </main>
+    </div>
+  )
+}
+
+// The tabs the distance script is set up to read (DIST_CUSTOMER_COLUMN in apps-script/distance-db.gs).
+const EXPECTED_TABS = ['Atlas-SRC', 'Atlas-BPK', 'เพิ่มเติม']
+
+// What the distance API returned, tab by tab, so missing data is easy to spot.
+function DistanceSource({ dist, onReload }) {
+  const ix = dist.index
+  const missing = ix ? EXPECTED_TABS.filter((t) => !ix.sheets.some((s) => s.sheet.trim() === t)) : []
+  return (
+    <div className={`conv-src${dist.status === 'error' ? ' bad' : ''}`}>
+      <div className="conv-src-head">
+        <Route size={14} />
+        <strong>ฐานข้อมูลระยะทาง</strong>
+        {dist.status === 'loading' && <span className="muted"><Loader2 size={12} className="spin" /> กำลังโหลด…</span>}
+        {dist.status === 'ready' && <span className="muted">{ix.count} แถว · {ix.byName.size} ชื่อลูกค้า</span>}
+        {dist.status === 'error' && <span>โหลดไม่ได้: {dist.error}</span>}
+        {dist.status !== 'loading' && (
+          <button type="button" onClick={onReload}><RefreshCw size={12} /> โหลดใหม่</button>
+        )}
+      </div>
+      {ix && (
+        <ul>
+          {ix.sheets.map((s) => (
+            <li key={s.sheet}>
+              <b>{s.sheet}</b> {s.count} แถว
+              <span className="muted"> · ชื่อจาก “{s.headers?.customer}” · ระยะทางจาก “{s.headers?.distance}”</span>
+            </li>
+          ))}
+          {missing.map((t) => <li key={t} className="warn"><AlertTriangle size={12} /> ไม่ได้ข้อมูลจากแท็บ {t}</li>)}
+          {ix.skipped.length > 0 && <li className="muted">ข้าม (ไม่มีคอลัมน์ลูกค้า + ระยะทาง): {ix.skipped.join(', ')}</li>}
+        </ul>
+      )}
     </div>
   )
 }
