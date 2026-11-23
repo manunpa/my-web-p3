@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { loadAlerts, API_URL, REFRESH_MS } from './fleetData'
 import { STOP_TYPE_NAMES, OTHER_TYPE } from './stopType'
-import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, MonthBars, Empty, nf } from './charts'
+import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, HourHeat, MonthBars, Empty, nf } from './charts'
 import {
   DAY, times, dShort, dDay, dTime, hm, startOfDay, pctChange, countBy, toInput, rangeFor, monthly,
   DashTabs, PeriodPicker, RangeBar, usePointerGlow,
@@ -36,6 +36,24 @@ function fmtMin(m) {
   const h = Math.floor(m / 60)
   const mm = Math.round(m % 60)
   return mm ? `${nf.format(h)} ชม. ${mm} นาที` : `${nf.format(h)} ชม.`
+}
+
+// Stop types use their own colors (categorical slots 4, 5, 7: yellow, magenta, violet), so they are
+// never mistaken for the alert types above, which use slots 1-3 on the same page.
+const STOP_COLORS = ['#c98500', '#d55181', '#9085e9']
+
+function stopPalette(records) {
+  const top = countBy(records, 'stopType').filter((t) => t.name !== OTHER_TYPE).slice(0, 3).map((t) => t.name)
+  return {
+    top,
+    split: (rows) => {
+      const counts = new Map(top.map((n) => [n, 0]))
+      let other = 0
+      for (const r of rows) counts.has(r.stopType) ? counts.set(r.stopType, counts.get(r.stopType) + 1) : other++
+      return [...[...counts].map(([name, value], i) => ({ name, value, color: STOP_COLORS[i] })),
+        { name: 'ประเภทอื่น', value: other, color: OTHER_COLOR }]
+    },
+  }
 }
 
 const avg = (rows) => (rows.length ? rows.reduce((s, r) => s + (r.minutes || 0), 0) / rows.length : 0)
@@ -89,9 +107,21 @@ function analyse(records, range, palette, compareLabel) {
   const hours = Array(24).fill(0)
   for (const r of rows) hours[r.start.getHours()]++
 
+  // Stop types (from the unlock reason): count, hour of day and average stop time per type.
+  const stopTypes = countBy(rows, 'stopType')
+  const stopHeat = stopTypes.map(({ name, value }) => {
+    const h = Array(24).fill(0)
+    for (const r of rows) if (r.stopType === name) h[r.start.getHours()]++
+    return { name, hours: h, total: value }
+  })
+  const stopAvg = stopTypes
+    .filter((t) => t.value >= 3) // an average of 1-2 cases says little
+    .map(({ name }) => ({ name, value: Math.round(avg(rows.filter((r) => r.stopType === name))) }))
+    .sort((a, b) => b.value - a.value)
+
   return {
     rows, daily, hours, typeSlices,
-    stopTypes: countBy(rows, 'stopType'),
+    stopTypes, stopHeat, stopAvg,
     ranks: Object.fromEntries(RANKS.map((k) => [k.id, countBy(rows.filter((r) => k.id !== 'releasedBy' || r.releasedBy), k.id)])),
     kpis: [
       {
@@ -260,6 +290,16 @@ export default function Dashboard() {
   const palette = useMemo(() => typePalette(state.records), [state.records])
   const data = useMemo(() => analyse(state.records, range, palette, 'เทียบช่วงก่อนหน้าที่ยาวเท่ากัน'), [state.records, range, palette])
   const months = useMemo(() => monthly(state.records, (rows) => splitTypes(rows, palette), range), [state.records, palette, range])
+  const stopPal = useMemo(() => stopPalette(state.records), [state.records])
+  const stopMonths = useMemo(() => monthly(state.records, stopPal.split, range), [state.records, stopPal, range])
+  const [drillType, setDrillType] = useState('')
+  const [drillBy, setDrillBy] = useState('driver')
+  const drillOptions = data ? data.stopTypes : []
+  const drill = drillType && drillOptions.some((t) => t.name === drillType) ? drillType : drillOptions[0]?.name ?? ''
+  const drillRows = useMemo(
+    () => (data ? countBy(data.rows.filter((r) => r.stopType === drill), drillBy).slice(0, 10) : []),
+    [data, drill, drillBy],
+  )
   const animKey = `${range?.from}:${range?.to}:${state.at?.getTime()}`
 
   const choose = (id) => {
@@ -372,11 +412,51 @@ export default function Dashboard() {
                 <RankBars key={animKey} data={data.stopTypes} format={times} total={data.rows.length} />
               </Panel>
 
-              <Panel className="span-3" i={9} title="ช่วงเวลาที่เกิดแจ้งเตือน" note="รวมทุกวัน แยกตามชั่วโมงที่เริ่ม (แท่งสว่าง = ช่วงที่เกิดบ่อยสุด)">
+              <Panel className="span-3" i={9} title="ประเภทการจอดรายเดือน"
+                note={`12 เดือนล่าสุด · 3 ประเภทที่พบบ่อยสุด แยกสี ที่เหลือรวมเป็น "ประเภทอื่น" · คลิกแท่งเพื่อดูเดือนนั้น`}>
+                <MonthBars months={stopMonths} active={(i) => stopMonths[i].active} onPick={pickMonth}
+                  format={times} animKey={state.at?.getTime()} />
+                <ul className="legend inline">
+                  {stopMonths[0].parts.map((p) => (
+                    <li key={p.name}><i style={{ background: p.color }} /><span>{p.name}</span></li>
+                  ))}
+                </ul>
+              </Panel>
+
+              <Panel className="span-2" i={10} title="ประเภทการจอด × ช่วงเวลา"
+                note="แต่ละช่อง = จำนวนเคสของประเภทนั้นในชั่วโมงที่เริ่ม (สีเข้ม = บ่อย)">
+                <HourHeat key={animKey} rows={data.stopHeat} format={times} />
+              </Panel>
+
+              <Panel i={11} title="เวลาจอดเฉลี่ยตามประเภท" note="นาทีต่อเคส · เฉพาะประเภทที่มีอย่างน้อย 3 เคส">
+                <RankBars key={animKey} data={data.stopAvg} format={fmtMin} />
+              </Panel>
+
+              <Panel className="span-2" i={12} title="ช่วงเวลาที่เกิดแจ้งเตือน" note="รวมทุกวัน แยกตามชั่วโมงที่เริ่ม (แท่งสว่าง = ช่วงที่เกิดบ่อยสุด)">
                 {data.rows.length ? <HourBars key={animKey} counts={data.hours} format={times} /> : <Empty />}
               </Panel>
 
-              <Panel className="span-3" i={10} title="รายการแจ้งเตือน" note="เรียงจากล่าสุด">
+              <Panel i={13} title="เจาะลึกประเภทการจอด" note={drill ? `ใครเกิด "${drill}" บ่อยสุด (10 อันดับ)` : ''}
+                actions={(
+                  <div className="drill-ctl">
+                    <label className="f type-pick small">
+                      <select value={drill} onChange={(e) => setDrillType(e.target.value)} aria-label="เลือกประเภทการจอด">
+                        {drillOptions.map((t) => <option key={t.name} value={t.name}>{t.name} ({nf.format(t.value)})</option>)}
+                      </select>
+                    </label>
+                    <div className="seg-ctl small" role="radiogroup" aria-label="จัดอันดับตาม">
+                      {RANKS.slice(0, 3).map((r) => (
+                        <button key={r.id} type="button" role="radio" aria-checked={drillBy === r.id}
+                          className={drillBy === r.id ? 'on' : ''} onClick={() => setDrillBy(r.id)}>{r.label}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}>
+                <RankBars key={drill + drillBy + animKey} data={drillRows} format={times}
+                  total={data.stopTypes.find((t) => t.name === drill)?.value} />
+              </Panel>
+
+              <Panel className="span-3" i={14} title="รายการแจ้งเตือน" note="เรียงจากล่าสุด">
                 <AlertsTable rows={data.rows} />
               </Panel>
             </div>

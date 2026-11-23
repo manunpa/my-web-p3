@@ -403,6 +403,70 @@ export function HourBars({ counts, format }) {
   )
 }
 
+/* ---------- category × hour heatmap ---------- */
+
+// rows: [{ name, hours: [24 counts], total }]. One hue (the gold accent), light -> strong by count;
+// empty cells stay a faint outline so "none" is not confused with "few".
+export function HourHeat({ rows, format }) {
+  const [ref, w] = useWidth()
+  const [hover, setHover] = useState(null)
+  const narrow = w < 560
+  const labelW = narrow ? 104 : 150
+  const m = { t: 6, r: 4, b: 24, l: labelW }
+  const cell = Math.max(6, (w - m.l - m.r) / 24)
+  const rowH = 26
+  const h = m.t + rows.length * rowH + m.b
+  const max = Math.max(1, ...rows.flatMap((r) => r.hours))
+  const hh = (i) => String(i).padStart(2, '0')
+  if (!rows.length) return <Empty />
+
+  return (
+    <div className="chart heat" ref={ref} onPointerLeave={() => setHover(null)}>
+      {w > 0 && (
+        <svg width={w} height={h} role="img" aria-label="จำนวนเคสแยกตามประเภทการจอดและชั่วโมงที่เริ่ม">
+          {rows.map((r, ri) => (
+            <g key={r.name}>
+              <text x={m.l - 8} y={m.t + ri * rowH + rowH / 2} dy="0.32em" textAnchor="end" className="tick heat-name">
+                {r.name.length > (narrow ? 12 : 20) ? `${r.name.slice(0, narrow ? 11 : 19)}…` : r.name}
+              </text>
+              {r.hours.map((v, i) => {
+                const on = hover && hover.r === ri && hover.h === i
+                return (
+                  <rect key={i} x={m.l + i * cell + 1} y={m.t + ri * rowH + 1} width={cell - 2} height={rowH - 2} rx={3}
+                    className={`heat-cell${v ? '' : ' zero'}${on ? ' on' : ''}`}
+                    style={v ? { fillOpacity: 0.14 + 0.86 * (v / max) } : undefined}
+                    onPointerEnter={() => setHover({ r: ri, h: i })} />
+                )
+              })}
+            </g>
+          ))}
+          {Array.from({ length: 24 }, (_, i) => i).filter((i) => i % (narrow ? 6 : 3) === 0).map((i) => (
+            <text key={i} x={m.l + i * cell + cell / 2} y={h - 8} textAnchor="middle" className="tick">{hh(i)}</text>
+          ))}
+        </svg>
+      )}
+      {hover && rows[hover.r] && (
+        <div className="tip" style={{
+          left: Math.max(90, Math.min(w - 90, m.l + (hover.h + 0.5) * cell)),
+          top: m.t + hover.r * rowH,
+        }}>
+          <span>{rows[hover.r].name} · {hh(hover.h)}:00–{hh(hover.h)}:59 น.</span>
+          <strong>{format(rows[hover.r].hours[hover.h])}</strong>
+        </div>
+      )}
+      <div className="heat-scale" aria-hidden="true">
+        <span>น้อย</span><i /><span>มาก (สูงสุด {nf.format(max)} ครั้ง/ช่อง)</span>
+      </div>
+      <table className="sr">
+        <caption>จำนวนเคสแยกตามประเภทการจอดและชั่วโมง</caption>
+        <tbody>{rows.map((r) => (
+          <tr key={r.name}><th>{r.name}</th>{r.hours.map((v, i) => <td key={i}>{v}</td>)}</tr>
+        ))}</tbody>
+      </table>
+    </div>
+  )
+}
+
 // Bar anchored to the baseline with rounded top corners only.
 function roundTop(x, base, w, h, r) {
   const rr = Math.min(r, h)
