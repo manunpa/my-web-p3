@@ -444,3 +444,11 @@ linear-gradient(160deg,#fbf8f1,#f3ecdc 50%,#fbf8f1)}
 [data-theme="light"] .notif:hover{background:rgba(0,0,0,.035)}
 [data-theme="light"] .na{background:rgba(255,255,255,.6)}
 [data-theme="light"] .notif-detail{border-color:rgba(0,0,0,.08)}
+/* ---- โหมดแอป (เปิดจากไอคอนหน้าจอโฮม) — src/pwa.js ใส่คลาส pwa-app ให้ ---- */
+/* แตะ 2 ทีไม่ซูม (ปุ่มที่กดเร็ว ๆ ติดกันยังรับครบ) · แผนที่ที่ตั้ง touch-action เองไม่กระทบ */
+html.pwa-app{touch-action:manipulation}
+@media all and (display-mode:standalone),all and (display-mode:fullscreen){html{touch-action:manipulation}}
+/* iPhone/iPad: แถบสถานะแบบ black-translucent ตัวอักษรขาวเสมอ → ธีมสว่างปูแถบเข้มใต้นาฬิกา/แบตให้อ่านออก (ธีมมืดไม่ต้อง) */
+html.pwa-app[data-theme="light"]::before{content:"";position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top,0px);background:#1c1917;z-index:2147483647;pointer-events:none}
+/* ช่องวันที่/เวลาบน iPhone มีความกว้างขั้นต่ำของตัวเอง ไม่ให้ล้นคอลัมน์ */
+input[type=date],input[type=datetime-local],input[type=time],input[type=month]{min-width:0;max-width:100%}
