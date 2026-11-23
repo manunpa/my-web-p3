@@ -39,6 +39,7 @@ export default function DocumentsPage() {
     setError(null)
     const picked = [...list].filter((f) => /\.(xlsx|xlsm|xls|csv)$/i.test(f.name))
     if (!picked.length) { setError('รองรับไฟล์ Excel (.xlsx, .xls) หรือ .csv'); return }
+    fetchDist(true) // ask the distance sheet again, so rows added since the page opened are found
     for (const f of picked) {
       const id = nextId++
       setFiles((fs) => [...fs, { id, name: f.name, status: 'loading' }])
@@ -74,7 +75,8 @@ export default function DocumentsPage() {
     [files, results],
   )
 
-  // Distance database, loaded when the page opens.
+  // Distance database, loaded when the page opens and again on every upload.
+  // While it reloads the previous copy stays in use, so the table does not go blank.
   const [dist, setDist] = useState({ status: 'idle', index: null, error: null })
   const fetchDist = (force) => {
     setDist((d) => ({ ...d, status: 'loading', error: null }))
@@ -83,7 +85,7 @@ export default function DocumentsPage() {
       .catch((e) => setDist((d) => ({ ...d, status: 'error', error: e.message })))
   }
   useEffect(() => {
-    fetchDist(false) // load on page open, so the database can be checked before adding a file
+    fetchDist(true) // load on page open (fresh, not a copy from an earlier visit)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Changes made in the table. They are kept by row key, so they survive changing another file's settings.
