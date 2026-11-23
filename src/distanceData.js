@@ -20,15 +20,16 @@ export function loadDistances(force = false) {
   return cached
 }
 
-// Names are compared without spaces, punctuation, company words or a leading "ลูกค้า",
-// so "ห้างหุ้นส่วนจำกัด ท๊อป แอลพีจี" and "หจก.ท๊อปแอลพีจี" are the same customer.
+// Names are compared without spaces, punctuation, company words, a leading "ลูกค้า" or Thai
+// tone marks / ็ / ์ ฯลฯ, so "ห้างหุ้นส่วนจำกัด ท๊อป แอลพีจี" = "หจก.ท๊อปแอลพีจี" and
+// "ลูกค้ากาสะลอง เซรามิคส์" = "บจก.กาสะลองเซรามิคส".
 export function normName(s) {
   return String(s ?? '')
     .toLowerCase()
     .replace(/ห้างหุ้นส่วนจำกัด|หจก\.?|บริษัท|บจก\.?|จำกัด|\(มหาชน\)|มหาชน|co\.?,?\s*ltd\.?|ltd\.?/g, '')
     .replace(/^\s*ลูกค้า/, '')
     .replace(/[\s.,'"`()[\]\-_/\\:;]+/g, '')
-    .replace(/[๊]/g, '')
+    .replace(/[็-๎]/g, '') // ็ ่ ้ ๊ ๋ ์ ํ ๎
 }
 const normDepot = (s) => {
   const t = String(s ?? '').toLowerCase().replace(/\s+/g, '')
