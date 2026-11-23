@@ -400,6 +400,8 @@ export default function BehaviorDashboard() {
     const rows = data.rows
     return {
       compare: prev ? (period !== 'custom' && period !== 'all' ? `${period} วันก่อนหน้า` : 'ช่วงก่อนหน้าที่ยาวเท่ากัน') : null,
+      all: dated,
+      rows,
       repeats: repeats(rows),
       effect: penaltyEffect(dated, rows),
       unitPenalty: penaltyByUnit(rows),

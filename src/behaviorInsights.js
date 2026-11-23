@@ -127,6 +127,54 @@ export function penaltyEffect(allRecords, rows) {
   }).filter((p) => p.given > 0)
 }
 
+/* 3b. Same driver before vs after: records in the W days before a penalty against the W days
+       after it. Comparing a driver with themself removes most of the "worse drivers get harsher
+       penalties" effect. Only penalties with full W-day windows on both sides inside the data count.
+       "ไม่มีความผิด" works as the baseline: the change seen without any penalty. */
+export function penaltyBeforeAfter(allRecords, rows, W) {
+  const byDriver = groupBy(allRecords, 'driver')
+  const first = Math.min(...allRecords.map((r) => r.start.getTime()))
+  const now = Date.now()
+  return PENALTY_STEPS.map((p) => {
+    const given = rows.filter((r) => penaltyStep(r.penalty) === p.step)
+    const ok = given.filter((r) => r.start - first >= W * DAY && now - r.start >= W * DAY)
+    let before = 0, after = 0, fewer = 0, more = 0, sameAgain = 0
+    for (const r of ok) {
+      const list = byDriver.get(r.driver) || []
+      const t = r.start.getTime() // a number: Date + number would join as text
+      const b = list.filter((x) => x !== r && x.start >= t - W * DAY && x.start < t).length
+      const a = list.filter((x) => x !== r && x.start > t && x.start <= t + W * DAY)
+      before += b
+      after += a.length
+      if (a.length < b) fewer++
+      else if (a.length > b) more++
+      if (a.some((x) => x.offense === r.offense)) sameAgain++
+    }
+    const n = ok.length
+    return {
+      name: p.label, step: p.step, given: given.length, n,
+      before: n ? before / n : null,
+      after: n ? after / n : null,
+      change: n && before ? ((after - before) / before) * 100 : null,
+      fewer: n ? (fewer / n) * 100 : null,
+      more: n ? (more / n) * 100 : null,
+      same: n ? (sameAgain / n) * 100 : null,
+    }
+  }).filter((p) => p.given > 0)
+}
+
+// Drivers who received at least one real penalty (verbal warning or more), most penalties first.
+export function penalizedDrivers(rows) {
+  return [...groupBy(rows.filter((r) => penaltyStep(r.penalty) >= 1), 'driver')]
+    .map(([name, l]) => ({ name, value: l.length })).sort((a, b) => b.value - a.value)
+}
+
+// One driver's records in time order, for the timeline.
+export function driverTimeline(allRecords, name) {
+  return allRecords.filter((r) => r.driver === name).sort((a, b) => a.start - b.start)
+    .map((r) => ({ id: r.id, start: r.start, step: penaltyStep(r.penalty), offense: r.offense, risk: r.risk, high: r.riskLevel >= 3 }))
+}
+
 /* 4. Fatigue: offenses about drowsiness, tiredness or driving too long without a break.
       (The sheet's "จำนวนวันทำงาน" column holds case age / "ปิดงาน", not days worked, so it is not used.) */
 const FATIGUE = /ง่วง|เมื่อยล้า|อ่อนเพลีย|หลับ|ขับรถต่อเนื่อง|พักไม่ครบ|จอดพักไม่ครบ/
