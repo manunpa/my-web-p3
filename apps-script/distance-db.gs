@@ -21,11 +21,20 @@
 const DIST_SHEET_NAME = '' // เว้นว่าง = อ่านทุกแท็บ · ใส่ชื่อ (เช่น 'ระยะทาง') = อ่านแท็บเดียว
 const DIST_READ_SOURCE = 'distance-read' // ต้องตรงกับที่หน้าเว็บส่งมา
 
+// แท็บ -> คอลัมน์ชื่อลูกค้าที่ใช้เทียบกับชื่อในแผนงานที่อัปโหลด
+// แท็บที่อยู่ในรายการนี้ใช้คอลัมน์ที่กำหนดเท่านั้น · แท็บอื่นหาคอลัมน์ลูกค้าให้เอง (DIST_HEADERS.customer)
+const DIST_CUSTOMER_COLUMN = {
+  'Atlas-SRC': 'ชื่อลูกค้าในแผนงาน',
+  'Atlas-BPK': 'ชื่อลูกค้า (แผนงาน BPK)',
+  'เพิ่มเติม': 'ชื่อลูกค้า (ไฟล์ระยะทาง)',
+}
+
 // หัวคอลัมน์ที่รู้จัก (ตัวแรกที่ตรงจะถูกใช้)
 const DIST_HEADERS = {
   depot: /คลัง|ต้นทาง|depot|origin|plant/i,
   customer: /ลูกค้า|ปลายทาง|customer|ship.?to|destination/i,
   distance: /ระยะ|กม|km|distance/i,
+  notDistance: /ชื่อ|name/i, // "ชื่อลูกค้า (ไฟล์ระยะทาง)" มีคำว่าระยะ แต่ไม่ใช่คอลัมน์ระยะทาง
 }
 
 function doGet() {
@@ -65,7 +74,7 @@ function readDistances_() {
     let h = -1
     let cols = null
     for (let i = 0; i < Math.min(values.length, 10); i++) {
-      const c = findCols_(values[i])
+      const c = findCols_(values[i], DIST_CUSTOMER_COLUMN[name.trim()])
       if (c.customer >= 0 && c.distance >= 0) { h = i; cols = c; break }
     }
     if (h < 0) { skipped.push(name); return }
@@ -98,15 +107,21 @@ function readDistances_() {
   return { ok: true, sheets: used, skipped: skipped, count: rows.length, rows: rows }
 }
 
-function findCols_(header) {
+// customerHeader: ชื่อคอลัมน์ลูกค้าที่กำหนดไว้ใน DIST_CUSTOMER_COLUMN (ไม่สนช่องว่าง) หรือ undefined = หาให้เอง
+function findCols_(header, customerHeader) {
   const cols = { depot: -1, customer: -1, distance: -1 }
+  const want = customerHeader ? String(customerHeader).replace(/\s+/g, '') : ''
   header.forEach((cell, i) => {
     const s = String(cell || '').replace(/\s+/g, '')
     if (!s) return
-    // ตรวจระยะทางก่อน เพราะหัวอย่าง "ระยะทางถึงลูกค้า" มีคำว่าลูกค้าด้วย
-    if (cols.distance < 0 && DIST_HEADERS.distance.test(s)) cols.distance = i
-    else if (cols.depot < 0 && DIST_HEADERS.depot.test(s)) cols.depot = i
-    else if (cols.customer < 0 && DIST_HEADERS.customer.test(s)) cols.customer = i
+    if (want) {
+      if (s === want) { cols.customer = i; return }
+    } else if (cols.customer < 0 && DIST_HEADERS.customer.test(s) && !DIST_HEADERS.distance.test(s)) {
+      cols.customer = i
+      return
+    }
+    if (cols.distance < 0 && DIST_HEADERS.distance.test(s) && !DIST_HEADERS.notDistance.test(s)) cols.distance = i
+    else if (cols.depot < 0 && DIST_HEADERS.depot.test(s) && !DIST_HEADERS.customer.test(s)) cols.depot = i
   })
   return cols
 }
@@ -121,6 +136,11 @@ function testData() {
   Logger.log('รวมทั้งหมด: ' + out.count + ' แถว จาก ' + out.sheets.length + ' แท็บ')
   out.sheets.forEach((s) => Logger.log('แท็บ ' + s.sheet + ': ' + s.count + ' แถว · คอลัมน์ ' + JSON.stringify(s.headers)))
   if (out.skipped.length) Logger.log('ข้าม (ไม่มีหัวคอลัมน์ลูกค้า + ระยะทาง): ' + out.skipped.join(', '))
+  const names = SpreadsheetApp.getActiveSpreadsheet().getSheets().map((s) => s.getName().trim())
+  Object.keys(DIST_CUSTOMER_COLUMN).forEach((tab) => {
+    if (names.indexOf(tab) < 0) Logger.log('⚠ ไม่พบแท็บ ' + tab + ' (ชื่อใน DIST_CUSTOMER_COLUMN ต้องตรงกับชื่อแท็บ)')
+    else if (out.skipped.indexOf(tab) >= 0) Logger.log('⚠ แท็บ ' + tab + ' ไม่พบคอลัมน์ "' + DIST_CUSTOMER_COLUMN[tab] + '" หรือคอลัมน์ระยะทางใน 10 แถวแรก')
+  })
   Logger.log('ตัวอย่าง: ' + JSON.stringify(out.rows.slice(0, 5)))
 }
 

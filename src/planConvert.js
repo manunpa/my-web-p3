@@ -168,6 +168,7 @@ const depotFromNote = (s) => {
 export function guessDepot(...texts) {
   const s = texts.filter(Boolean).join(' ')
   if (/BPK|บางปะกง/i.test(s)) return 'BPK'
+  if (/VEHICLE_REGISTRATION|CUSTOMER_SHIPTO/i.test(s)) return 'SRC' // SRC's OrderUpdate export layout
   for (const code of ['BRP', 'SRC', 'SCN']) if (new RegExp(code, 'i').test(s)) return code
   return ''
 }

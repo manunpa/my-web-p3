@@ -53,7 +53,9 @@ export function findDistance(index, customer, depot) {
   if (!list?.length) return null
   const d = normDepot(depot)
   if (d) {
-    const same = list.find((x) => x.depot === d || x.sheet === d || x.depot.includes(d) || (x.depot && d.includes(x.depot)))
+    // Tab "Atlas-BPK" belongs to depot BPK, "Atlas-SRC" to SRC.
+    const same = list.find((x) => x.depot === d || x.sheet === d || x.depot.includes(d) || x.sheet.includes(d)
+      || (x.depot && d.includes(x.depot)))
     if (same) return same.distance
   }
   return list.every((x) => x.distance === list[0].distance) ? list[0].distance : null
