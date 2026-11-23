@@ -3,6 +3,7 @@
 /* ------------------------------------------------------------------ */
 
 import { fetchProtectedJson } from './protectedFetch'
+import { stopType } from './stopType'
 
 // Google Sheet data link. Set to '' to show sample data instead.
 // Supported link types:
@@ -240,6 +241,7 @@ export function toRecords(table) {
         releasedAt,
         releasedBy: text(row, 'releasedBy'),
         reason: text(row, 'reason'),
+        stopType: stopType(text(row, 'reason')),
         devices: text(row, 'devices'),
       }
     })

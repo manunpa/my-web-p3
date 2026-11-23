@@ -4,6 +4,7 @@ import {
   CheckCircle2, Clock3, AlertTriangle,
 } from 'lucide-react'
 import { loadAlerts, API_URL, REFRESH_MS } from './fleetData'
+import { STOP_TYPE_NAMES, OTHER_TYPE } from './stopType'
 import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, MonthBars, Empty, nf } from './charts'
 import {
   DAY, times, dShort, dDay, dTime, hm, startOfDay, pctChange, countBy, toInput, rangeFor, monthly,
@@ -90,6 +91,7 @@ function analyse(records, range, palette, compareLabel) {
 
   return {
     rows, daily, hours, typeSlices,
+    stopTypes: countBy(rows, 'stopType'),
     ranks: Object.fromEntries(RANKS.map((k) => [k.id, countBy(rows.filter((r) => k.id !== 'releasedBy' || r.releasedBy), k.id)])),
     kpis: [
       {
@@ -127,19 +129,25 @@ const PAGE = 25
 function AlertsTable({ rows }) {
   const [q, setQ] = useState('')
   const [stage, setStage] = useState('all')
+  const [type, setType] = useState('')
   const [limit, setLimit] = useState(PAGE)
 
   const stageCounts = useMemo(() => countBy(rows, 'stage'), [rows])
+  const typeCounts = useMemo(() => {
+    const m = new Map(countBy(rows, 'stopType').map((t) => [t.name, t.value]))
+    return STOP_TYPE_NAMES.filter((n) => m.has(n)).map((n) => ({ name: n, value: m.get(n) }))
+  }, [rows])
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase()
     return rows
       .filter((r) => stage === 'all' || r.stage === stage)
+      .filter((r) => !type || r.stopType === type)
       .filter((r) => !s || [r.caseNo, r.driver, r.driverId, r.plate, r.doNo, r.location, r.status, r.reason, r.releasedBy]
         .some((v) => v && v.toLowerCase().includes(s)))
       .sort((a, b) => b.start - a.start)
-  }, [rows, q, stage])
+  }, [rows, q, stage, type])
 
-  useEffect(() => setLimit(PAGE), [q, stage, rows])
+  useEffect(() => setLimit(PAGE), [q, stage, type, rows])
 
   return (
     <>
@@ -148,6 +156,12 @@ function AlertsTable({ rows }) {
           <Search size={15} />
           <input type="search" placeholder="ค้นหา คนขับ ทะเบียน Case No เลข DO สถานที่ สาเหตุ…"
             value={q} onChange={(e) => setQ(e.target.value)} aria-label="ค้นหาแจ้งเตือน" />
+        </label>
+        <label className="f type-pick">
+          <select value={type} onChange={(e) => setType(e.target.value)} aria-label="ประเภทการจอด">
+            <option value="">ทุกประเภทการจอด</option>
+            {typeCounts.map((t) => <option key={t.name} value={t.name}>{t.name} ({nf.format(t.value)})</option>)}
+          </select>
         </label>
         <div className="chips" role="radiogroup" aria-label="ผลการพิจารณา">
           <button type="button" role="radio" aria-checked={stage === 'all'} className={stage === 'all' ? 'on' : ''}
@@ -168,7 +182,7 @@ function AlertsTable({ rows }) {
               <tr>
                 <th>Case No</th><th>เริ่ม</th><th>คนขับ</th><th>ทะเบียน</th><th>สถานะรถ</th>
                 <th>สำคัญ</th><th className="num">รวมเวลา</th><th>สถานที่</th><th>เลข DO</th>
-                <th>ผล</th><th>ผู้ปลด / เวลา</th><th>สาเหตุที่ปลด</th>
+                <th>ผล</th><th>ผู้ปลด / เวลา</th><th>สาเหตุที่ปลด</th><th>ประเภทการจอด</th>
               </tr>
             </thead>
             <tbody>
@@ -193,6 +207,7 @@ function AlertsTable({ rows }) {
                     <td><span className={`status ${r.stage}`}><S.icon size={13} />{S.label}</span></td>
                     <td className="nowrap">{r.releasedBy || '–'}<small>{r.releasedAt ? dTime(r.releasedAt) : ''}</small></td>
                     <td className="clip wide" title={r.reason}>{r.reason || '–'}</td>
+                    <td className="nowrap"><span className={`stop-type${r.stopType === OTHER_TYPE ? ' other' : ''}`}>{r.stopType}</span></td>
                   </tr>
                 )
               })}
@@ -353,11 +368,15 @@ export default function Dashboard() {
                 <RankBars key={rank + animKey} data={data.ranks[rank].slice(0, 10)} format={times} total={data.rows.length} />
               </Panel>
 
-              <Panel className="span-2" i={8} title="ช่วงเวลาที่เกิดแจ้งเตือน" note="รวมทุกวัน แยกตามชั่วโมงที่เริ่ม (แท่งสว่าง = ช่วงที่เกิดบ่อยสุด)">
+              <Panel className="span-2" i={8} title="ประเภทการจอด" note="แยกจากคำในสาเหตุที่ปลดล็อค">
+                <RankBars key={animKey} data={data.stopTypes} format={times} total={data.rows.length} />
+              </Panel>
+
+              <Panel className="span-3" i={9} title="ช่วงเวลาที่เกิดแจ้งเตือน" note="รวมทุกวัน แยกตามชั่วโมงที่เริ่ม (แท่งสว่าง = ช่วงที่เกิดบ่อยสุด)">
                 {data.rows.length ? <HourBars key={animKey} counts={data.hours} format={times} /> : <Empty />}
               </Panel>
 
-              <Panel className="span-3" i={9} title="รายการแจ้งเตือน" note="เรียงจากล่าสุด">
+              <Panel className="span-3" i={10} title="รายการแจ้งเตือน" note="เรียงจากล่าสุด">
                 <AlertsTable rows={data.rows} />
               </Panel>
             </div>
