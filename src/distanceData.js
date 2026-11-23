@@ -58,11 +58,22 @@ export function depotCode(depot, sheet) {
     || String(depot ?? '').replace(/^\s*คลัง\s*/, '').trim() || null
 }
 
+// A customer cell without a note written after the name, tried when the full cell is not found:
+// "หจก. นครการก๊าซไทย (PT) (ถึง 25/11/69)" -> "หจก. นครการก๊าซไทย (PT)"
+// "หจก. ลำมาศแก๊ส (ถึงวันที่ 23/11/69) ขา…" -> "หจก. ลำมาศแก๊ส"
+// Only a bracket holding "ถึง" or a date counts as a note; "(PT)" stays part of the name.
+export function stripNote(s) {
+  return String(s ?? '')
+    .replace(/\s*[([](?=[^)\]]*(?:ถึง|\d{1,2}\s*[/.-]\s*\d{1,2}))[^)\]]*[)\]].*$/s, '')
+    .replace(/\s*\n.*$/s, '')
+    .trim()
+}
+
 // Distance (and the depot it is from) for a customer -> { distance, depot } or null.
 // Prefers a row of the same depot (or a tab named after it); without a depot match it is used
 // only when every row for that customer gives the same distance.
 export function findMatch(index, customer, depot) {
-  const list = index?.byName.get(normName(customer))
+  const list = index?.byName.get(normName(customer)) ?? index?.byName.get(normName(stripNote(customer)))
   if (!list?.length) return null
   const d = normDepot(depot)
   const want = knownDepot(depot) // "PCT" in the plan matches "คลังพิจิตร" in the sheet
