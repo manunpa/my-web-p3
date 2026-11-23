@@ -11,7 +11,7 @@ import { useTilt, ripple } from './useTilt'
 const LINKS = [
   { label: 'Dashboard', hint: 'Overview at a glance', icon: LayoutDashboard, href: '#/dashboard' },
   { label: 'Maps API', hint: 'Customer station map', icon: MapIcon, href: '#/maps' },
-  { label: 'Documents', hint: 'Files and records', icon: FileText, href: '#' },
+  { label: 'Documents', hint: 'Plan file converter', icon: FileText, href: '#/documents' },
   { label: 'Reports', hint: 'Charts and summaries', icon: BarChart3, href: '#' },
   { label: 'Notifications', hint: 'Latest updates', icon: Bell, href: '#/notifications' },
   { label: 'Settings', hint: 'Preferences', icon: Settings, href: '#' },

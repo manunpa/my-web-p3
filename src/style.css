@@ -452,3 +452,28 @@ html.pwa-app{touch-action:manipulation}
 html.pwa-app[data-theme="light"]::before{content:"";position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top,0px);background:#1c1917;z-index:2147483647;pointer-events:none}
 /* ช่องวันที่/เวลาบน iPhone มีความกว้างขั้นต่ำของตัวเอง ไม่ให้ล้นคอลัมน์ */
 input[type=date],input[type=datetime-local],input[type=time],input[type=month]{min-width:0;max-width:100%}
+/* Documents: plan converter */
+.conv{display:grid;gap:14px}.conv .dash-head{margin-bottom:6px}
+.drop{display:flex;flex-direction:column;align-items:center;gap:6px;padding:28px 16px;border:2px dashed var(--line);border-radius:16px;background:var(--field);color:var(--muted);text-align:center;cursor:pointer;transition:border-color .2s,background .2s}
+.drop:hover,.drop.on{border-color:var(--gold-text);background:rgba(250,204,21,.06)}
+.drop svg{stroke:var(--gold-text)}.drop strong{color:var(--text);font-size:14px}.drop small{font-size:12px}
+.conv label{margin:0;font-size:12px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;gap:6px}
+.conv input:not([type=file]),.conv select{height:38px;padding:0 10px;border-radius:10px;border:1px solid var(--line);background:var(--field);color:var(--text);font:inherit;font-size:13px;min-width:0}
+.conv input:focus,.conv select:focus{outline:0;border-color:var(--gold-text)}
+.conv-carrier{margin-top:14px!important;max-width:220px}
+.conv-err{display:flex;align-items:center;gap:6px;margin:10px 0 0;color:var(--err);font-size:13px}
+.conv-files{list-style:none;margin:0;padding:0;display:grid;gap:14px}
+.conv-file-top{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.conv-file-top .ic{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:rgba(250,204,21,.14);color:var(--gold-text)}
+.conv-file-top strong{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conv-x{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:none;color:var(--muted);cursor:pointer}
+.conv-x:hover{color:var(--err);border-color:var(--err)}
+.conv-opts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:10px}
+.conv-file .muted{margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;line-height:1.5}
+.conv-dl{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 16px;border:0;border-radius:10px;background:var(--gold);color:var(--ink);font:inherit;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(250,204,21,.25)}
+.conv-dl[disabled]{opacity:.55;cursor:default}
+.conv-table{font-size:12px;min-width:1300px}.conv-table th{text-transform:none;letter-spacing:0;white-space:nowrap}
+.conv-table td{padding:7px 10px;white-space:nowrap}.conv-table tbody tr{animation:none}
+.conv-table tr.first td{border-top:1px solid var(--line)}
+.spin{animation:spin 1s linear infinite}
+@media (max-width:640px){.conv-opts{grid-template-columns:minmax(0,1fr)}.conv-carrier{max-width:none}.conv .panel-head{flex-wrap:wrap}}
