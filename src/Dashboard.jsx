@@ -6,7 +6,7 @@ import {
 import { loadAlerts, API_URL, REFRESH_MS } from './fleetData'
 import { STOP_TYPE_NAMES, OTHER_TYPE } from './stopType'
 import {
-  hotspots, noise, noiseByMonth, response, longStops, rejected as rejectedOf, weekHeat, SHORT_MIN, LONG_MIN,
+  hotspots, noise, noiseByMonth, response, stopShares, rejected as rejectedOf, weekHeat, SHORT_MIN,
 } from './leoInsights'
 import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, HourHeat, MonthBars, Empty, nf } from './charts'
 import {
@@ -126,7 +126,8 @@ function analyse(records, range, palette, compareLabel) {
     rows, daily, hours, typeSlices,
     stopTypes, stopHeat, stopAvg,
     hot: { district: hotspots(rows, 'district'), area: hotspots(rows, 'area') }, noise: noise(rows), resp: response(rows),
-    longs: longStops(rows), rej: rejectedOf(rows), week: weekHeat(rows),
+    shares: { ...stopShares(rows, prev), compare: prev ? (period ? `${period} วันก่อนหน้า` : 'ช่วงก่อนหน้าที่ยาวเท่ากัน') : null },
+    rej: rejectedOf(rows), week: weekHeat(rows),
     ranks: Object.fromEntries(RANKS.map((k) => [k.id, countBy(rows.filter((r) => k.id !== 'releasedBy' || r.releasedBy), k.id)])),
     kpis: [
       {
@@ -361,34 +362,49 @@ function RejectedPanel({ data }) {
   )
 }
 
-function LongStops({ rows }) {
-  const [limit, setLimit] = useState(10)
-  useEffect(() => setLimit(10), [rows])
-  if (!rows.length) return <Empty>ไม่มีเคสจอดนานที่ต้องตามต่อ</Empty>
+// Share of each stop type in the selected range, with the change against the previous range of
+// the same length (in percentage points). The 3 most common types keep the colors of the monthly
+// stop-type chart; the rest are grey, as there.
+function ShareTable({ data, colorOf, compare }) {
+  const [hover, setHover] = useState(null)
+  if (!data.total) return <Empty />
+  const bar = [...data.rows.filter((r) => colorOf(r.name)), {
+    name: 'ประเภทอื่น', count: data.rows.filter((r) => !colorOf(r.name)).reduce((s, r) => s + r.count, 0),
+  }].map((r) => ({ ...r, pct: (r.count / data.total) * 100, color: colorOf(r.name) || OTHER_COLOR })).filter((r) => r.count)
   return (
     <>
+      <div className="share-bar" role="img" aria-label="สัดส่วนประเภทการจอด" onPointerLeave={() => setHover(null)}>
+        {bar.map((s) => (
+          <span key={s.name} style={{ flexGrow: s.count, background: s.color }} className={hover === s.name ? 'on' : ''}
+            onPointerEnter={() => setHover(s.name)} title={`${s.name} ${pct(s.pct)} (${nf.format(s.count)} เคส)`}>
+            {s.pct >= 9 && <b>{pct(s.pct)}</b>}
+          </span>
+        ))}
+      </div>
+      <ul className="legend inline">
+        {bar.map((s) => <li key={s.name}><i style={{ background: s.color }} /><span>{s.name} {pct(s.pct)}</span></li>)}
+      </ul>
       <div className="table-scroll">
-        <table className="orders insight">
-          <thead><tr><th>เริ่ม</th><th>คนขับ</th><th>ทะเบียน</th><th>ประเภท</th><th className="num">รวมเวลา</th><th>พื้นที่</th><th>สาเหตุที่ปลด</th></tr></thead>
+        <table className="orders insight share">
+          <thead>
+            <tr><th>ประเภทการจอด</th><th className="num">เคส</th><th>สัดส่วน</th><th className="num">{compare ? 'เทียบช่วงก่อน' : ''}</th></tr>
+          </thead>
           <tbody>
-            {rows.slice(0, limit).map((r, i) => (
-              <tr key={r.id} style={{ '--i': Math.min(i, 12) }}>
-                <td className="nowrap">{dTime(r.start)}</td>
-                <td className="nowrap">{r.driver}</td>
-                <td className="nowrap">{r.plate}</td>
-                <td className="nowrap"><span className={`stop-type${r.stopType === OTHER_TYPE ? ' other' : ''}`}>{r.stopType}</span></td>
-                <td className="num nowrap long">{fmtMin(r.minutes)}</td>
-                <td className="nowrap">{r.area || r.province}</td>
-                <td className="clip wide" title={r.reason}>{r.reason || '–'}</td>
+            {data.rows.map((r, i) => (
+              <tr key={r.name} style={{ '--i': Math.min(i, 12) }}>
+                <td className="nowrap"><i className="dot" style={{ background: colorOf(r.name) || OTHER_COLOR }} />{r.name}</td>
+                <td className="num">{nf.format(r.count)}</td>
+                <td className="nowrap"><span className="cell-bar wide"><i style={{ width: `${(r.pct / data.rows[0].pct) * 100}%` }} /></span><b>{pct(r.pct)}</b></td>
+                <td className="num nowrap muted">
+                  {compare && r.delta !== null && (Math.abs(r.delta) < 0.05 ? 'เท่าเดิม'
+                    : `${r.delta > 0 ? '▲' : '▼'} ${Math.abs(r.delta).toFixed(1)} จุด`)}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div className="table-foot">
-        <span className="muted">แสดง {nf.format(Math.min(limit, rows.length))} จาก {nf.format(rows.length)} เคส</span>
-        {limit < rows.length && <button type="button" className="more" onClick={() => setLimit((l) => l + 20)}>แสดงเพิ่ม</button>}
-      </div>
+      {compare && <p className="muted share-note">"จุด" = จุดเปอร์เซ็นต์ เทียบกับ {compare}</p>}
     </>
   )
 }
@@ -624,9 +640,10 @@ export default function Dashboard() {
                 <ResponsePanel data={data.resp} />
               </Panel>
 
-              <Panel className="span-2" i={18} title="เคสจอดนานที่ควรตามต่อ"
-                note={`จอดเกิน ${LONG_MIN} นาที และไม่ใช่อยู่ลูกค้า คลัง/หน่วยงาน ซ่อมบำรุง เรือ จุดลงเวลา หรือรถไม่ได้วิ่งงาน · เรียงจากนานสุด`}>
-                <LongStops rows={data.longs} />
+              <Panel className="span-2" i={18} title="สัดส่วนแจ้งเตือนตามประเภทการจอด"
+                note={`แต่ละประเภทคิดเป็นกี่ % ของ ${nf.format(data.shares.total)} แจ้งเตือนในช่วงที่เลือก`}>
+                <ShareTable data={data.shares} colorOf={(n) => STOP_COLORS[stopPal.top.indexOf(n)]}
+                  compare={data.shares.compare} />
               </Panel>
 
               <Panel i={19} title="เคสไม่อนุมัติ">

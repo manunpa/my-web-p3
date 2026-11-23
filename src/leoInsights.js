@@ -117,15 +117,25 @@ export function response(rows) {
   }
 }
 
-/* 4. Long stops that are not explained by the job: over 30 minutes, outside customers, depots,
-      workshops, ferries, legal rest points or idle trucks. */
-export const LONG_MIN = 30
-const EXPECTED_LONG = new Set([
-  'อยู่ลูกค้า', 'จอดหน่วยงาน/คลัง', 'ซ่อมบำรุง/ยาง', 'เรือข้ามฟาก', 'จุดลงเวลา/ด่าน/ทางด่วน', 'รถไม่ได้วิ่งงาน',
-])
-
-export function longStops(rows) {
-  return rows.filter((r) => r.minutes > LONG_MIN && !EXPECTED_LONG.has(r.stopType)).sort((a, b) => b.minutes - a.minutes)
+/* 4. Share of each stop type (percent of all alerts in the range), and the change against the
+      previous range in percentage points (null when there is no previous range or no data in it). */
+export function stopShares(rows, prev) {
+  const share = (list) => {
+    const m = new Map()
+    for (const r of list) m.set(r.stopType, (m.get(r.stopType) || 0) + 1)
+    return m
+  }
+  const now = share(rows)
+  const before = prev && prev.length ? share(prev) : null
+  return {
+    total: rows.length,
+    rows: [...now]
+      .map(([name, count]) => {
+        const p = (count / rows.length) * 100
+        return { name, count, pct: p, delta: before ? p - ((before.get(name) || 0) / prev.length) * 100 : null }
+      })
+      .sort((a, b) => b.count - a.count),
+  }
 }
 
 /* 6. Rejected unlock requests: which stop types, and how often each person rejects. */
