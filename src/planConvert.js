@@ -407,8 +407,29 @@ export function sheetForDate(names, ymd) {
   return byDate ?? names.find((n) => n.trim() === String(ymd.d)) ?? null
 }
 
-// The sheet to convert: the one named after the date, otherwise the one with the most deliveries.
+// The sheet that was open when the .xlsx was last saved (workbookView activeTab in xl/workbook.xml),
+// or null when the file does not say (.xls, .csv).
+export async function activeSheet(buf, names) {
+  try {
+    const XLSX = await loadXlsx()
+    const zip = XLSX.CFB.read(buf, { type: 'array' })
+    const entry = XLSX.CFB.find(zip, '/xl/workbook.xml') || XLSX.CFB.find(zip, 'xl/workbook.xml')
+    if (!entry?.content) return null
+    const xml = new TextDecoder().decode(entry.content)
+    const view = xml.match(/<(?:\w+:)?workbookView\b[^>]*>/)
+    if (!view) return null
+    const tab = Number((view[0].match(/\bactiveTab="(\d+)"/) || [])[1] || 0) // Excel's default is the first tab
+    return names[tab] ?? null
+  } catch {
+    return null
+  }
+}
+
+// The sheet to convert: the one open when the file was saved; for files that do not say,
+// the one named after the date, otherwise the one with the most deliveries.
 export async function pickSheet(buf, names, ymd) {
+  const open = await activeSheet(buf, names)
+  if (open) return open
   const named = sheetForDate(names, ymd)
   if (named) return named
   let best = names[0]
