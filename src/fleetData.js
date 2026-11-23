@@ -183,6 +183,26 @@ export function provinceOf(location) {
   return best || '(ไม่ระบุ)'
 }
 
+// Sub-district + district of an address, so the same place written two ways counts as one:
+//   "ถนนลำลูกกา ตำบลลาดสวาย อำเภอลำลูกกา จังหวัดปทุมธานี ..." and "ลาดสวาย, ลำลูกกา, ปทุมธานี"
+//   -> "ลาดสวาย · ลำลูกกา". Returns '' when the address does not say (then only the province is known).
+export function areaOf(location) {
+  const s = String(location ?? '').replace(/\s+/g, ' ').trim()
+  if (!s) return ''
+  const clean = (x) => String(x ?? '').replace(/^(ตำบล|แขวง|อำเภอ|เขต|อ\.|ต\.)\s*/, '').replace(/^เมือง(?=\S)/, 'เมือง').trim()
+  const tam = s.match(/(?:ตำบล|แขวง|ต\.)\s*([^\s,]+)/)
+  const amp = s.match(/(?:อำเภอ|เขต|อ\.)\s*([^\s,]+)/)
+  if (tam && amp) return `${clean(tam[1])} · ${clean(amp[1])}`
+  // "ท่าตูม, ศรีมหาโพธิ, ปราจีนบุรี" or "หนองขาม ศรีราชา ชลบุรี": sub-district, district, province
+  const parts = (s.includes(',') ? s.split(',') : s.split(' '))
+    .map((x) => x.replace(/\s*\d{5}$/, '').trim()) // "กรุงเทพมหานคร 10800" -> "กรุงเทพมหานคร"
+    .filter((x) => x && !/^\d+$/.test(x))
+  const pi = parts.findIndex((x) => PROVINCES.includes(x.replace(/^จังหวัด/, '')) || x === 'กรุงเทพมหานคร')
+  if (pi >= 2 && !/\d|ประเทศ/.test(parts[pi - 1] + parts[pi - 2])) return `${clean(parts[pi - 2])} · ${clean(parts[pi - 1])}`
+  if (amp) return clean(amp[1])
+  return ''
+}
+
 // Google Sheets turns a cell like "3100128975,3100128976" (two DO numbers) into one huge number
 // shown as "31,001,289,753,100,100,000". Only the first 10 digits survive intact.
 function cleanDo(v) {
@@ -233,6 +253,7 @@ export function toRecords(table) {
         status: text(row, 'status') || '(ไม่ระบุ)',
         location,
         province: provinceOf(location),
+        area: areaOf(location),
         ...cleanDo(get(row, 'doNo')),
         requested,
         approval,

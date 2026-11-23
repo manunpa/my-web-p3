@@ -198,6 +198,31 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .alerts .clip{max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .alerts .clip.wide{max-width:260px}
 .alerts small{display:block;color:var(--muted);font-size:11px}
+/* LEO insight panels */
+.insight{font-size:12px;min-width:560px}
+.insight td{padding:8px 10px;vertical-align:top}
+.insight .nowrap{white-space:nowrap}
+.insight .clip{max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.insight .clip.wide{max-width:280px}
+.insight small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+.insight .long{color:var(--err);font-weight:600}
+.cell-bar{display:inline-block;width:70px;height:8px;margin-right:8px;border-radius:4px;background:var(--field);overflow:hidden;vertical-align:middle}
+.cell-bar i{display:block;height:100%;border-radius:4px;background:var(--gold)}
+.insight-hero h4{margin:14px 0 6px;font-size:12px;font-weight:600;color:var(--text)}
+.insight-hero h4 small{color:var(--muted);font-weight:400}
+.insight-hero p{margin:2px 0 0;font-size:12px}
+.hero-num{font-size:34px;font-weight:800;line-height:1.1;color:var(--gold-text);font-variant-numeric:tabular-nums}
+.mini-list{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px;font-size:12px}
+.mini-list li{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:baseline}
+.mini-list span{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mini-list b{font-variant-numeric:tabular-nums}
+.mini-list small{color:var(--muted);font-size:11px;min-width:56px;text-align:right}
+.mini-bars{list-style:none;margin:0;padding:0;display:grid;gap:5px;font-size:12px}
+.mini-bars li{display:grid;grid-template-columns:62px 1fr 44px;gap:8px;align-items:center}
+.mini-bars .cell-bar{width:100%;margin:0}
+.mini-bars span:first-child{color:var(--muted)}
+.mini-bars b{text-align:right;font-variant-numeric:tabular-nums}
+[data-theme="light"] .cell-bar i{background:#ca8a04}
 .prio{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:6px;font-weight:700;font-size:11px;border:1px solid var(--line);color:var(--muted)}
 .prio.p-A{color:var(--ink);background:var(--gold);border-color:var(--gold-text)}
 .status.approved{color:#0ca30c;border-color:rgba(12,163,12,.4);background:rgba(12,163,12,.1)}

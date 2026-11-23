@@ -5,6 +5,9 @@ import {
 } from 'lucide-react'
 import { loadAlerts, API_URL, REFRESH_MS } from './fleetData'
 import { STOP_TYPE_NAMES, OTHER_TYPE } from './stopType'
+import {
+  hotspots, noise, noiseByMonth, response, longStops, rejected as rejectedOf, weekHeat, SHORT_MIN, LONG_MIN,
+} from './leoInsights'
 import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, HourHeat, MonthBars, Empty, nf } from './charts'
 import {
   DAY, times, dShort, dDay, dTime, hm, startOfDay, pctChange, countBy, toInput, rangeFor, monthly,
@@ -122,6 +125,8 @@ function analyse(records, range, palette, compareLabel) {
   return {
     rows, daily, hours, typeSlices,
     stopTypes, stopHeat, stopAvg,
+    hot: hotspots(rows), noise: noise(rows), resp: response(rows),
+    longs: longStops(rows), rej: rejectedOf(rows), week: weekHeat(rows),
     ranks: Object.fromEntries(RANKS.map((k) => [k.id, countBy(rows.filter((r) => k.id !== 'releasedBy' || r.releasedBy), k.id)])),
     kpis: [
       {
@@ -255,6 +260,130 @@ function AlertsTable({ rows }) {
   )
 }
 
+/* ---------- extra analyses ---------- */
+
+const pct = (v) => `${(v ?? 0).toFixed(v >= 10 || v === 0 ? 0 : 1)}%`
+
+function Hotspots({ data }) {
+  if (!data.length) return <Empty />
+  const max = data[0].count
+  return (
+    <div className="table-scroll">
+      <table className="orders insight">
+        <thead><tr><th>#</th><th>พื้นที่</th><th className="num">เคส</th><th>ประเภทที่พบมากสุด</th><th className="num">จอดเฉลี่ย</th><th className="num">คนขับ</th></tr></thead>
+        <tbody>
+          {data.map((h, i) => (
+            <tr key={h.name} style={{ '--i': Math.min(i, 12) }}>
+              <td className="muted">{i + 1}</td>
+              <td className="nowrap">{h.name}{h.name !== h.province && <small>{h.province}</small>}</td>
+              <td className="num">
+                <span className="cell-bar"><i style={{ width: `${(h.count / max) * 100}%` }} /></span>{nf.format(h.count)}
+              </td>
+              <td className="nowrap">
+                <span className={`stop-type${h.top?.name === OTHER_TYPE ? ' other' : ''}`}>{h.top?.name}</span>
+                <small>{nf.format(h.top?.value ?? 0)} เคส ({pct((h.top?.value / h.count) * 100)})</small>
+              </td>
+              <td className="num nowrap">{fmtMin(h.avg)}</td>
+              <td className="num">{nf.format(h.drivers)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function NoisePanel({ data, months }) {
+  const max = Math.max(1, ...months.map((m) => m.pct ?? 0))
+  return (
+    <div className="insight-hero">
+      <div className="hero-num">{pct(data.pct)}</div>
+      <p className="muted">
+        {nf.format(data.count)} จาก {nf.format(data.total)} แจ้งเตือน เป็นไฟแดงหรือจราจรที่จอดไม่เกิน {SHORT_MIN} นาที
+      </p>
+      <ul className="mini-list">
+        {data.byType.map((t) => <li key={t.name}><span>{t.name}</span><b>{nf.format(t.value)}</b></li>)}
+      </ul>
+      <h4>สัดส่วนรายเดือน</h4>
+      <ul className="mini-bars">
+        {months.map((m) => (
+          <li key={m.label} title={m.total ? `${m.short} จาก ${m.total} แจ้งเตือน` : 'ไม่มีข้อมูล'}>
+            <span>{m.label}</span>
+            <span className="cell-bar"><i style={{ width: `${((m.pct ?? 0) / max) * 100}%` }} /></span>
+            <b>{m.pct === null ? '–' : pct(m.pct)}</b>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function ResponsePanel({ data }) {
+  return (
+    <div className="insight-hero">
+      <div className="hero-num">{data.median === null ? '–' : fmtMin(data.median)}</div>
+      <p className="muted">ค่ากลางจากเวลาสิ้นสุดเคสถึงเวลาปลด ({nf.format(data.count)} เคส)</p>
+      <h4>แยกตามกะ (เวลาสิ้นสุดเคส)</h4>
+      <ul className="mini-list">
+        {data.shifts.map((s) => (
+          <li key={s.name}><span>{s.name}</span><b>{s.count ? fmtMin(s.value) : '–'}</b><small>{nf.format(s.count)} เคส</small></li>
+        ))}
+      </ul>
+      <h4>แยกตามผู้ปลด <small>(ค่ากลาง นาที · ≥ 5 เคส)</small></h4>
+      <RankBars data={data.people} format={fmtMin} />
+    </div>
+  )
+}
+
+function RejectedPanel({ data }) {
+  return (
+    <div className="insight-hero">
+      <div className="hero-num">{nf.format(data.count)}</div>
+      <p className="muted">เคสไม่อนุมัติ · {pct(data.rate)} ของเคสที่พิจารณาแล้ว</p>
+      <h4>ตามประเภทการจอด</h4>
+      {data.byType.length ? <RankBars data={data.byType} format={times} total={data.count} /> : <Empty>ไม่มีเคสไม่อนุมัติ</Empty>}
+      <h4>ตามผู้ปลด <small>(≥ 5 เคส)</small></h4>
+      <ul className="mini-list">
+        {data.people.map((p) => (
+          <li key={p.name}><span>{p.name}</span><b>{pct(p.rate)}</b><small>{nf.format(p.rejected)} / {nf.format(p.total)}</small></li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function LongStops({ rows }) {
+  const [limit, setLimit] = useState(10)
+  useEffect(() => setLimit(10), [rows])
+  if (!rows.length) return <Empty>ไม่มีเคสจอดนานที่ต้องตามต่อ</Empty>
+  return (
+    <>
+      <div className="table-scroll">
+        <table className="orders insight">
+          <thead><tr><th>เริ่ม</th><th>คนขับ</th><th>ทะเบียน</th><th>ประเภท</th><th className="num">รวมเวลา</th><th>พื้นที่</th><th>สาเหตุที่ปลด</th></tr></thead>
+          <tbody>
+            {rows.slice(0, limit).map((r, i) => (
+              <tr key={r.id} style={{ '--i': Math.min(i, 12) }}>
+                <td className="nowrap">{dTime(r.start)}</td>
+                <td className="nowrap">{r.driver}</td>
+                <td className="nowrap">{r.plate}</td>
+                <td className="nowrap"><span className={`stop-type${r.stopType === OTHER_TYPE ? ' other' : ''}`}>{r.stopType}</span></td>
+                <td className="num nowrap long">{fmtMin(r.minutes)}</td>
+                <td className="nowrap">{r.area || r.province}</td>
+                <td className="clip wide" title={r.reason}>{r.reason || '–'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="table-foot">
+        <span className="muted">แสดง {nf.format(Math.min(limit, rows.length))} จาก {nf.format(rows.length)} เคส</span>
+        {limit < rows.length && <button type="button" className="more" onClick={() => setLimit((l) => l + 20)}>แสดงเพิ่ม</button>}
+      </div>
+    </>
+  )
+}
+
 /* ---------- page ---------- */
 
 export default function Dashboard() {
@@ -290,6 +419,7 @@ export default function Dashboard() {
   const palette = useMemo(() => typePalette(state.records), [state.records])
   const data = useMemo(() => analyse(state.records, range, palette, 'เทียบช่วงก่อนหน้าที่ยาวเท่ากัน'), [state.records, range, palette])
   const months = useMemo(() => monthly(state.records, (rows) => splitTypes(rows, palette), range), [state.records, palette, range])
+  const noiseMonths = useMemo(() => noiseByMonth(state.records), [state.records])
   const stopPal = useMemo(() => stopPalette(state.records), [state.records])
   const stopMonths = useMemo(() => monthly(state.records, stopPal.split, range), [state.records, stopPal, range])
   const [drillType, setDrillType] = useState('')
@@ -456,7 +586,34 @@ export default function Dashboard() {
                   total={data.stopTypes.find((t) => t.name === drill)?.value} />
               </Panel>
 
-              <Panel className="span-3" i={14} title="รายการแจ้งเตือน" note="เรียงจากล่าสุด">
+              <Panel className="span-2" i={14} title="จุดที่เกิดซ้ำ"
+                note="12 พื้นที่ (ตำบล · อำเภอ) ที่มีเคสมากสุดในช่วงที่เลือก · ไม่มีตำบลในที่อยู่จะนับรวมเป็นจังหวัด">
+                <Hotspots data={data.hot} />
+              </Panel>
+
+              <Panel i={15} title="แจ้งเตือนที่ไม่ต้องตรวจจริง" note={`ไฟแดง/จราจร ที่จอดไม่เกิน ${SHORT_MIN} นาที`}>
+                <NoisePanel data={data.noise} months={noiseMonths} />
+              </Panel>
+
+              <Panel className="span-2" i={16} title="วันในสัปดาห์ × ช่วงเวลา"
+                note="แต่ละช่อง = จำนวนเคสที่เริ่มในวันและชั่วโมงนั้น (สีเข้ม = หนาแน่น) ใช้ดูการจัดคนเข้ากะ">
+                <HourHeat key={animKey} rows={data.week} format={times} />
+              </Panel>
+
+              <Panel i={17} title="เวลาตอบสนองของผู้ปลด" note="ยิ่งน้อยยิ่งเร็ว">
+                <ResponsePanel data={data.resp} />
+              </Panel>
+
+              <Panel className="span-2" i={18} title="เคสจอดนานที่ควรตามต่อ"
+                note={`จอดเกิน ${LONG_MIN} นาที และไม่ใช่อยู่ลูกค้า คลัง/หน่วยงาน ซ่อมบำรุง เรือ จุดลงเวลา หรือรถไม่ได้วิ่งงาน · เรียงจากนานสุด`}>
+                <LongStops rows={data.longs} />
+              </Panel>
+
+              <Panel i={19} title="เคสไม่อนุมัติ">
+                <RejectedPanel data={data.rej} />
+              </Panel>
+
+              <Panel className="span-3" i={20} title="รายการแจ้งเตือน" note="เรียงจากล่าสุด">
                 <AlertsTable rows={data.rows} />
               </Panel>
             </div>
