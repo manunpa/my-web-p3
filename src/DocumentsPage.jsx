@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { loadDistances, findMatch, findGeofence } from './distanceData'
 import { archivePlan, PLAN_ARCHIVE_URL } from './planArchive'
+import { calcTrip, fmtCell, SPEED } from './planTiming'
 import {
   OUT_HEAD, readBook, readSheet, pickSheet, sheetDate, guessDepot, convertSheet, toRows, numberRows,
   writeXlsx, fmtYmd, toInputDate, fromInputDate,
@@ -18,6 +19,11 @@ const today = () => {
   return { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() }
 }
 let nextId = 1
+
+// "plan": take the times from the file as they are. "calc": work out departure and start times
+// from distance, vehicle type and depot G2G (src/planTiming.js). The choice is remembered per browser.
+const MODE_KEY = 'planConverter.timeMode'
+const readMode = () => { try { return localStorage.getItem(MODE_KEY) === 'calc' ? 'calc' : 'plan' } catch { return 'plan' } }
 
 // Reads a sheet and fills in the settings found in it (date, depot).
 async function loadSheet(file, sheet) {
@@ -34,6 +40,8 @@ export default function DocumentsPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [archive, setArchive] = useState({ status: 'idle' }) // saving the exported plan to the archive sheet
+  const [mode, setModeState] = useState(readMode)
+  const setMode = (m) => { setModeState(m); try { localStorage.setItem(MODE_KEY, m) } catch { /* private window */ } }
   const input = useRef(null)
 
   const update = (id, patch) => setFiles((fs) => fs.map((f) => (f.id === id ? { ...f, ...patch } : f)))
@@ -103,7 +111,7 @@ export default function DocumentsPage() {
       list.splice(at < 0 ? list.length : at + 1, 0, a)
     }
     let depot = null // the depot of the trip a row belongs to
-    return list
+    const out = list
       .filter((r) => !removed.has(r.key))
       .map((r) => {
         const cells = r.cells.map((v, c) => (edits[r.key] && c in edits[r.key] ? edits[r.key][c] : v))
@@ -126,13 +134,46 @@ export default function DocumentsPage() {
         }
         // Name of this customer in the map (Geofence), from the distance sheet. Shown only, never exported.
         const geofence = dist.index && cells[4] ? findGeofence(dist.index, cells[4], depot) : null
-        return { ...r, added: r.key.startsWith('n'), cells, autoKm, autoDepot, closeTo, geofence }
+        // Where the distance came from, for the calculation notes (PlanCheck has its own customer distances).
+        const kmSource = empty(6) ? null : typed(6) ? 'พิมพ์เอง' : autoKm
+          ? (closeTo ? `ฐานข้อมูลระยะทาง (ชื่อใกล้เคียง "${closeTo}")` : 'ฐานข้อมูลระยะทาง') : 'ไฟล์แผน'
+        return { ...r, added: r.key.startsWith('n'), cells, autoKm, autoDepot, closeTo, geofence, kmSource, typed7: typed(7), typed8: typed(8) }
       })
-  }, [base, added, removed, edits, dist.index])
+    if (mode !== 'calc') return out
+    // Calculated times: trip by trip. A time typed in the table still wins. Only the two time
+    // columns change, so the exported form stays the same; the notes are shown on the page only.
+    const unitOf = (key) => files.find((f) => key.startsWith(`${f.id}:`))?.depot?.trim() || null
+    for (let i = 0; i < out.length; i++) {
+      if (!out[i].start && i !== 0) continue
+      let j = i + 1
+      while (j < out.length && !out[j].start) j++
+      const trip = out.slice(i, j)
+      const head = trip[0]
+      const res = calcTrip(trip.map((r) => r.cells), unitOf(head.key), head.typed7)
+      if (!res.keep && head.kmSource) res.notes.unshift(`ระยะทางจาก${head.kmSource}`)
+      head.calc = res
+      if (!res.keep) {
+        if (!res.departFromPlan) { head.cells[7] = fmtCell(res.depart); head.autoDepart = true }
+        if (!head.typed8) { head.cells[8] = fmtCell(res.start); head.autoStart = true }
+      }
+      trip.forEach((r, k) => { if (k && res.drops[k]) r.dropWarn = res.drops[k] })
+      i = j - 1
+    }
+    return out
+  }, [base, added, removed, edits, dist.index, mode, files])
   const kmFilled = table.filter((r) => r.autoKm).length
   const kmClose = table.filter((r) => r.closeTo).length
   const depotFilled = table.filter((r) => r.autoDepot).length
   const kmMissing = table.filter((r) => r.cells[4] && (r.cells[6] == null || r.cells[6] === '')).length
+  // Trips with no departure time: PlanCheck works it out itself when the file is imported.
+  // PlanCheck uses a departure time when the file has one; only a blank one is worked out from the distance.
+  const blank = (v) => v == null || v === ''
+  const noDepart = table.filter((r, i) => (r.start || i === 0) && blank(r.cells[7]))
+  const pcCalc = noDepart.filter((r) => !blank(r.cells[6])).length
+  const pcCannot = noDepart.length - pcCalc
+  const calcDone = table.filter((r) => r.calc && !r.calc.keep).length
+  const calcKept = table.filter((r) => r.calc && (r.calc.keep || r.calc.departFromPlan)).length
+  const calcWarn = table.filter((r) => r.calc?.warns.length || r.dropWarn).length
   const rows = useMemo(() => numberRows(table), [table])
   const drops = rows.length
   const tripCount = table.filter((r, i) => r.start || i === 0).length
@@ -281,6 +322,28 @@ export default function DocumentsPage() {
               คลิกช่องเพื่อแก้ไข · <Plus size={12} /> เพิ่มจุดส่งใต้แถวนั้น · <Trash2 size={12} /> ลบแถว (ลบแถวแรกของเที่ยว = ลบทั้งเที่ยว)
               · ลำดับและ TRIP_DROP นับให้อัตโนมัติ
             </p>
+            <div className="conv-mode">
+              <span>เวลาออกเดินทาง / เริ่มงาน</span>
+              <div className="seg-ctl small" role="radiogroup" aria-label="วิธีได้เวลาออกเดินทางและเวลาเริ่มงาน">
+                <button type="button" role="radio" aria-checked={mode === 'plan'} className={mode === 'plan' ? 'on' : ''} onClick={() => setMode('plan')}>ตามแผน (ดึงข้อมูลอย่างเดียว)</button>
+                <button type="button" role="radio" aria-checked={mode === 'calc'} className={mode === 'calc' ? 'on' : ''} onClick={() => setMode('calc')}>คำนวณให้ใหม่</button>
+              </div>
+              {mode === 'calc' && (
+                <span className="muted">
+                  คำนวณ {calcDone} เที่ยว · ใช้เวลาออกจากแผน {calcKept} เที่ยว (ดรอปแรกไม่มีระยะทาง หรือพิมพ์เวลาออกเอง · เวลาเริ่มงานยังคิดจาก G2G)
+                  {calcWarn > 0 && <b className="conv-warn-count"> · ควรเช็ก {calcWarn} แถว</b>}
+                  {' '}· สิบล้อ {SPEED['10W']} / หัวลาก {SPEED.SEMI} กม./ชม. · เริ่มงาน = ถึงคลัง = ออก − G2G · สูตรเดียวกับ PlanCheck · ฟอร์มที่ส่งออกเหมือนเดิม
+                  <br />เวลาออกที่คำนวณจะติดไปกับไฟล์ PlanCheck จะใช้ตามไฟล์ ไม่คำนวณซ้ำ
+                </span>
+              )}
+              {mode === 'plan' && (
+                <span className="muted">
+                  PlanCheck ใช้เวลาออกตามไฟล์ถ้ามี (ไม่สนระยะทาง) และคำนวณจากระยะทางเฉพาะเที่ยวที่ไม่มีเวลาออก
+                  {pcCalc > 0 && ` · ไม่มีเวลาออกแต่มีระยะทาง ${pcCalc} เที่ยว: PlanCheck จะคำนวณให้ (เลือก "คำนวณให้ใหม่" เพื่อดูผลก่อน)`}
+                  {pcCannot > 0 && <b className="conv-warn-count"> · ไม่มีทั้งเวลาออกและระยะทาง {pcCannot} เที่ยว: คำนวณไม่ได้ ควรเติมก่อนนำเข้า</b>}
+                </span>
+              )}
+            </div>
             <p className={`conv-km${dist.status === 'error' ? ' bad' : ''}`}>
               <Route size={14} />
               {dist.status === 'loading' && 'กำลังโหลดฐานข้อมูลระยะทาง…'}
@@ -305,6 +368,7 @@ export default function DocumentsPage() {
                   <thead>
                     <tr>
                       <th aria-label="จัดการแถว" />{OUT_HEAD.map((h) => <th key={h}>{h}</th>)}
+                      {mode === 'calc' && <th className="calc-col" title="แสดงให้ดูเท่านั้น ไม่อยู่ในไฟล์ Excel ที่ส่งออก">การคำนวณ<br />(ดูอย่างเดียว)</th>}
                       <th className="geo-col" title="แสดงให้ดูเท่านั้น ไม่อยู่ในไฟล์ Excel ที่ส่งออก">ชื่อใน Geofence <small>(ดูอย่างเดียว)</small></th>
                     </tr>
                   </thead>
@@ -322,7 +386,8 @@ export default function DocumentsPage() {
                             key={c}
                             className={edits[r.key] && c in edits[r.key] ? 'edited'
                               : c === 6 && r.closeTo ? 'auto-km close'
-                              : (c === 6 && r.autoKm) || (c === 3 && r.autoDepot) ? 'auto-km' : ''}
+                              : (c === 6 && r.autoKm) || (c === 3 && r.autoDepot) ? 'auto-km'
+                              : (c === 7 && r.autoDepart) || (c === 8 && r.autoStart) ? 'auto-time' : ''}
                             title={c === 6 && r.closeTo && !(edits[r.key] && 6 in edits[r.key]) ? `ชื่อใกล้เคียง: ใช้ระยะทางของ "${r.closeTo}" ในชีท` : undefined}
                           >
                             <input
@@ -333,6 +398,13 @@ export default function DocumentsPage() {
                             />
                           </td>
                         )))}
+                        {mode === 'calc' && (
+                          <td className="calc-col">
+                            {r.calc?.warns.map((w) => <span key={w} className="calc-warn"><AlertTriangle size={11} /> {w}</span>)}
+                            {r.dropWarn && <span className="calc-warn"><AlertTriangle size={11} /> {r.dropWarn}</span>}
+                            {r.calc && <span className={r.calc.keep ? 'calc-keep' : 'muted'}>{r.calc.notes.join(' · ')}</span>}
+                          </td>
+                        )}
                         <td className="geo-col" title={r.geofence?.fuzzy ? `ชื่อใกล้เคียง: "${r.geofence.sheetName}" ในชีทระยะทาง` : undefined}>
                           {r.geofence?.name
                             ? <span className={r.geofence.fuzzy ? 'close' : ''}>{r.geofence.name}</span>
