@@ -197,6 +197,19 @@ export default function DocumentsPage() {
     setRemoved((s) => new Set([...s, ...keys]))
   }
   const resetEdits = () => { setEdits({}); setAdded([]); setRemoved(new Set()) }
+  // Recalculate from the latest inputs, dropping only manually edited output times on each trip.
+  const recalculate = () => setEdits((current) => {
+    const next = { ...current }
+    for (const r of table) {
+      if (!r.start || !next[r.key]) continue
+      const row = { ...next[r.key] }
+      delete row[7]
+      delete row[8]
+      if (Object.keys(row).length) next[r.key] = row
+      else delete next[r.key]
+    }
+    return next
+  })
 
   const download = async () => {
     setSaving(true)
@@ -334,6 +347,12 @@ export default function DocumentsPage() {
                 <button type="button" role="radio" aria-checked={mode === 'plan'} className={mode === 'plan' ? 'on' : ''} onClick={() => setMode('plan')}>ตามแผน (ดึงข้อมูลอย่างเดียว)</button>
                 <button type="button" role="radio" aria-checked={mode === 'calc'} className={mode === 'calc' ? 'on' : ''} onClick={() => setMode('calc')}>คำนวณให้ใหม่</button>
               </div>
+              {mode === 'calc' && (
+                <button type="button" className="conv-btn" onClick={recalculate}
+                  title="คำนวณใหม่จากข้อมูลล่าสุด โดยเขียนทับเวลาออกและเวลาเริ่มงานที่พิมพ์เอง">
+                  <RefreshCw size={14} /> คำนวณเวลาใหม่
+                </button>
+              )}
               {mode === 'calc' && (
                 <span className="muted">
                   คำนวณ {calcDone} เที่ยว · ใช้เวลาออกจากแผน {calcKept} เที่ยว (ดรอปแรกไม่มีระยะทาง หรือพิมพ์เวลาออกเอง · ถือเป็นเวลาออกจากหน่วยงาน แล้วคิดต่อไปข้างหน้า)
