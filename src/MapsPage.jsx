@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Search, RefreshCw, MapPin, Layers, Crosshair, X, Copy, Check, ExternalLink, AlertTriangle,
-  LocateFixed, Navigation, Fuel, Car, Bus, Bike,
+  LocateFixed, Navigation, Fuel, Car, Bus, Bike, Eye,
 } from 'lucide-react'
+import StreetViewPanel from './StreetViewPanel'
 import {
   loadGeofences, cachedGeofences, googleMapsLink, navLink, parseCoords, OTHER_SUPPLIER_COLOR,
   distanceKm, nearestTo, formatDist, loadStations, cachedStations, fuelInk,
@@ -128,9 +129,19 @@ export default function MapsPage() {
   // typing a coordinate replaces my location
   useEffect(() => { if (typedPin && me) loc.off() }, [typedPin]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // copy buttons inside map popups
+  // Street View panel (opens over the map; each opening is counted by streetViewQuota.js)
+  const [sv, setSv] = useState(null)
+
+  // copy / Street View buttons inside map popups
   useEffect(() => {
     const onClick = async (e) => {
+      const svBtn = e.target.closest?.('.mpop-btn[data-sv]')
+      if (svBtn) {
+        e.preventDefault()
+        const [lat, lng] = svBtn.dataset.sv.split(',').map(Number)
+        if (Number.isFinite(lat) && Number.isFinite(lng)) setSv({ lat, lng, key: Date.now() })
+        return
+      }
       const btn = e.target.closest?.('.mpop-btn[data-copy]')
       if (!btn) return
       e.preventDefault()
@@ -414,6 +425,10 @@ export default function MapsPage() {
                 <a className="more" href={navLink(selected)} target="_blank" rel="noopener noreferrer">
                   <Navigation size={14} /> นำทาง
                 </a>
+                <button type="button" className="more"
+                  onClick={() => setSv({ lat: selected.lat, lng: selected.lng, name: selected.name, key: Date.now() })}>
+                  <Eye size={14} /> Street View
+                </button>
               </div>
             </div>
           )}
@@ -507,6 +522,7 @@ export default function MapsPage() {
               </div>
             </>
           )}
+          {sv && <StreetViewPanel at={sv} onClose={() => setSv(null)} />}
           {note && <div className="map-note" role="status">{note.text}</div>}
           {data.status === 'loading' && <div className="map-msg"><MapPin size={18} /> กำลังโหลดพิกัด…</div>}
           {data.error && data.status === 'ready' && <div className="map-toast">โหลดข้อมูลล่าสุดไม่สำเร็จ แสดงข้อมูลชุดก่อนหน้า</div>}

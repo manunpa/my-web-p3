@@ -45,6 +45,13 @@ export function preloadGoogleMaps() {
   return loader
 }
 
+// Lets other parts of the page (Street View) know when Google refuses the key.
+export const googleAuthFailed = () => authFailed
+export function watchGoogleAuth(cb) {
+  authListeners.add(cb)
+  return () => authListeners.delete(cb)
+}
+
 // Fewer things to draw: hide points of interest and transit everywhere.
 const LEAN = [
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },

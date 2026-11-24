@@ -271,12 +271,16 @@ export function labelT(lenPx, i) {
   return Math.min(1, Math.max(LABEL_FRAC[i % 5], 28 / lenPx)) // never under the blue dot
 }
 
+// Opens Street View on Google's own page (free, not counted by us).
+export const streetViewLink = (p) => `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.lat},${p.lng}`
+
 export const navLink = (p) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`
 
 // Copy / navigate buttons for popups. MapsPage handles clicks on [data-copy].
 function popupActions(p) {
   const c = `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`
   return `<div class="mpop-actions">
+    <button type="button" class="mpop-btn" data-sv="${p.lat},${p.lng}">👁 Street View</button>
     <button type="button" class="mpop-btn" data-copy="${c}">⧉ คัดลอกพิกัด</button>
     <a class="mpop-btn primary" href="${navLink(p)}" target="_blank" rel="noopener">➤ นำทาง</a>
   </div>`

@@ -76,6 +76,31 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Shared monthly counter of Street View panoramas opened: streetViewQuota/{YYYYMM} = { count }.
+    // Same idea as mapsQuota: only this month's document (Thailand time), only +1 at a time, never above 4500
+    // (Google's free allowance is 5000 a month). Keep 4500 the same as STREET_VIEW_MONTHLY_LIMIT in src/streetViewQuota.js.
+    function thaiMonth() {
+      let t = request.time + duration.value(7, 'h');
+      return string(t.year() * 100 + t.month());
+    }
+
+    match /streetViewQuota/{month} {
+      allow read: if activeSession();
+
+      allow create: if activeSession()
+        && month == thaiMonth()
+        && request.resource.data.keys().hasOnly(['count'])
+        && request.resource.data.count == 1;
+
+      allow update: if activeSession()
+        && month == thaiMonth()
+        && request.resource.data.keys().hasOnly(['count'])
+        && request.resource.data.count == resource.data.count + 1
+        && request.resource.data.count <= 4500;
+
+      allow delete: if false;
+    }
+
     // How each Telegram alert on the Notifications page was handled: notifActions/{message_id}.
     // Shared by the whole team: any signed-in user can read and set it, but only as themselves.
     // No deletes: putting an alert back to "new" is a write with status 'new'.
