@@ -20,10 +20,8 @@ const today = () => {
 }
 let nextId = 1
 
-// "plan": take the times from the file as they are. "calc": work out departure and start times
-// from distance, vehicle type and depot G2G (src/planTiming.js). The choice is remembered per browser.
-const MODE_KEY = 'planConverter.timeMode'
-const readMode = () => { try { return localStorage.getItem(MODE_KEY) === 'calc' ? 'calc' : 'plan' } catch { return 'plan' } }
+// Start in plan-only mode on every page load. Users can explicitly switch to calculation when needed.
+const readMode = () => 'plan'
 
 // Reads a sheet and fills in the settings found in it (date, depot).
 async function loadSheet(file, sheet) {
@@ -41,7 +39,7 @@ export default function DocumentsPage() {
   const [error, setError] = useState(null)
   const [archive, setArchive] = useState({ status: 'idle' }) // saving the exported plan to the archive sheet
   const [mode, setModeState] = useState(readMode)
-  const setMode = (m) => { setModeState(m); try { localStorage.setItem(MODE_KEY, m) } catch { /* private window */ } }
+  const setMode = (m) => setModeState(m)
   const input = useRef(null)
 
   const update = (id, patch) => setFiles((fs) => fs.map((f) => (f.id === id ? { ...f, ...patch } : f)))
