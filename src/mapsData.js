@@ -4,6 +4,7 @@
 
 import { fetchProtectedJson } from './protectedFetch'
 import { DMF_CREDIT, PLATFORM_GROUP, areaColor } from './offshoreData'
+import { ADMIN_CREDIT } from './geoAdmin'
 
 // Google Sheet (Apps Script) returning [{ Geofence, Latitude, Longitude, Supplier, ... }]
 // Only answers signed-in users: the Firebase ID token is checked by the script
@@ -240,9 +241,39 @@ export function areaPopupHtml(props) {
   </div>`
 }
 
+// "ต.… อ.… จ.…" line of a popup (areaText is '' until the boundary file is loaded)
+const areaLineHtml = (areaText) => (areaText ? `<span class="mpop-area">📍 ${escapeHtml(areaText)}</span>` : '')
+
 // popup for any point on the map (customer station, fuel station or offshore platform)
-export const pointPopupHtml = (p, color) => (p.kind === 'station' ? stationPopupHtml(p, color)
-  : p.kind === 'platform' ? platformPopupHtml(p, color) : popupHtml(p, color))
+export function pointPopupHtml(p, color, areaText = '') {
+  const html = p.kind === 'station' ? stationPopupHtml(p, color) : p.kind === 'platform' ? platformPopupHtml(p, color) : popupHtml(p, color)
+  // the area goes right under the coordinates line
+  return areaText ? html.replace(/(<code>[^<]*<\/code>)/, `$1${areaLineHtml(areaText)}`) : html
+}
+
+/**
+ * Popup of a place picked on the map (double-click, or press and hold on a phone).
+ * pick = { lat, lng, status: 'loading' | 'done' | 'error', areaText, near }
+ */
+export function placePopupHtml(pick) {
+  const c = `${pick.lat.toFixed(6)}, ${pick.lng.toFixed(6)}`
+  const area = pick.status === 'loading' ? '<span class="mpop-area muted">กำลังหาตำบล / อำเภอ / จังหวัด…</span>'
+    : pick.status === 'error' ? '<span class="mpop-area muted">โหลดข้อมูลขอบเขตไม่สำเร็จ แสดงเฉพาะพิกัด</span>'
+      : pick.areaText ? `${areaLineHtml(pick.areaText)}${pick.near ? '<span class="mpop-src">ใกล้แนวเขต ค่านี้อาจคลาดเคลื่อน</span>' : ''}`
+        : '<span class="mpop-area muted">ไม่พบพื้นที่ปกครอง (อาจอยู่ในทะเลหรือนอกประเทศ)</span>'
+  return `<div class="mpop">
+    <div class="mpop-sup">จุดที่เลือกบนแผนที่</div>
+    <code>${c}</code>
+    ${area}
+    <div class="mpop-actions">
+      <button type="button" class="mpop-btn" data-copy="${c}">⧉ คัดลอกพิกัด</button>
+      ${pick.areaText ? `<button type="button" class="mpop-btn" data-copy="${escapeHtml(pick.areaText)}">⧉ คัดลอกพื้นที่</button>` : ''}
+      <button type="button" class="mpop-btn" data-addxy="${c}">＋ เพิ่มในแผน</button>
+      <button type="button" class="mpop-btn" data-sv="${pick.lat},${pick.lng}">👁 Street View</button>
+    </div>
+    ${pick.status === 'done' && pick.areaText ? `<span class="mpop-src">${escapeHtml(ADMIN_CREDIT)}</span>` : ''}
+  </div>`
+}
 
 export const googleMapsLink = (p) => `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`
 

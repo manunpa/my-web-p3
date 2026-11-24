@@ -450,6 +450,9 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .plat-dot{width:10px;height:10px;transform:rotate(45deg);border-radius:2px;box-shadow:0 0 0 1.5px #fff}
 .area-dot{width:12px;height:10px;border:1.5px dashed;border-radius:2px;background:#0e749022}
 .mpop-src{margin-top:2px;color:var(--muted);font-size:10.5px}
+.mpop-area{font-weight:600}
+.mpop-area.muted{font-weight:400;color:var(--muted)}
+.area-line{margin:0;font-size:12.5px;font-weight:600}
 .gm-style .mpop-src{color:#6b6a66}
 .mpop-brand{padding:1px 7px;border-radius:6px;font-weight:700}
 .mpop-sec{margin-top:2px;font-size:11px;font-weight:600;color:var(--muted)}

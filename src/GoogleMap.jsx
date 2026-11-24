@@ -96,7 +96,7 @@ const clusterSize = (n) => (n < 10 ? 34 : n < 100 ? 40 : n < 1000 ? 48 : 56)
  */
 export default function GoogleMap({
   points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
-  me, nearest, following, locked, onUnlock, focus, overlays, onFail, rain, areas, route, stops,
+  me, nearest, following, locked, onUnlock, focus, overlays, onFail, rain, areas, route, stops, picked, onPick, areaText,
 }) {
   const box = useRef(null)
   const map = useRef(null)
@@ -115,7 +115,7 @@ export default function GoogleMap({
   const [ready, setReady] = useState(false)
   const [error, setError] = useState(authFailed ? 'auth' : null)
   const live = useRef({})
-  live.current = { onSelect, onView, colorOf, active, locked, onUnlock, me, following, nearest, onFail }
+  live.current = { onSelect, onView, colorOf, active, locked, onUnlock, me, following, nearest, onFail, onPick, areaText }
 
   // Google Maps cannot be used (daily limit reached, key refused, script or quota check failed):
   // tell the page, which switches to OpenStreetMap by itself.
@@ -208,6 +208,36 @@ export default function GoogleMap({
         disableDefaultUI: true, zoomControl: true, scaleControl: true,
         gestureHandling: 'greedy', clickableIcons: false, keyboardShortcuts: false,
         isFractionalZoomEnabled: false, styles: LEAN,
+        disableDoubleClickZoom: true, // double-click picks a place (coordinates + area) instead of zooming
+      })
+      let lastPick = 0
+      const pick = (ll) => {
+        if (Date.now() - lastPick < 400) return
+        lastPick = Date.now()
+        live.current.onPick?.({ lat: ll.lat(), lng: ll.lng() })
+      }
+      m.addListener('dblclick', (e) => pick(e.latLng))
+      m.addListener('rightclick', (e) => pick(e.latLng))
+      // press and hold on a phone: the pixel under the finger is turned into a position by hand
+      let hold = null
+      const stopHold = () => { clearTimeout(hold); hold = null }
+      box.current.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'touch' || e.target.closest('button, [role="button"], .gm-style-iw')) return
+        const { clientX, clientY } = e
+        stopHold()
+        hold = setTimeout(() => {
+          hold = null
+          const r = box.current.getBoundingClientRect(), b = m.getBounds(), proj = m.getProjection()
+          if (!b || !proj) return
+          const scale = 2 ** m.getZoom()
+          const tl = proj.fromLatLngToPoint(new gm.LatLng(b.getNorthEast().lat(), b.getSouthWest().lng()))
+          pick(proj.fromPointToLatLng(new gm.Point(tl.x + (clientX - r.left) / scale, tl.y + (clientY - r.top) / scale)))
+        }, 650)
+        const move = (ev) => { if (Math.hypot(ev.clientX - clientX, ev.clientY - clientY) > 10) off() }
+        const off = () => { stopHold(); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', off); window.removeEventListener('pointercancel', off) }
+        window.addEventListener('pointermove', move)
+        window.addEventListener('pointerup', off)
+        window.addEventListener('pointercancel', off)
       })
       m.addListener('idle', () => {
         redraw()
@@ -385,9 +415,28 @@ export default function GoogleMap({
     if (!active) return
     map.current.panTo(pos)
     if (map.current.getZoom() < 16) map.current.setZoom(17)
-    info.current.setContent(pointPopupHtml(selected, colorOf(selected.supplier)))
+    info.current.setContent(pointPopupHtml(selected, colorOf(selected.supplier), areaText?.(selected) ?? ''))
     info.current.open({ map: map.current, anchor: highlight.current, shouldFocus: false })
   }, [ready, selected, colorOf]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // the boundary file arrived after the popup was built: add the area line to it
+  const hasArea = !!areaText
+  useEffect(() => {
+    if (ready && selected && highlight.current) info.current.setContent(pointPopupHtml(selected, colorOf(selected.supplier), areaText?.(selected) ?? ''))
+  }, [ready, hasArea]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // a place picked by double-click / long press: an info window with its coordinates and area
+  const pickKey = useRef(null)
+  useEffect(() => {
+    if (!ready) return
+    if (!picked) { if (pickKey.current) { info.current.close(); pickKey.current = null } return }
+    info.current.setContent(picked.html)
+    if (pickKey.current !== picked.key) {
+      pickKey.current = picked.key
+      info.current.setPosition({ lat: picked.lat, lng: picked.lng })
+      info.current.open({ map: map.current, shouldFocus: false })
+    }
+  }, [ready, picked])
 
   // searched coordinate: red pin + info window
   useEffect(() => {

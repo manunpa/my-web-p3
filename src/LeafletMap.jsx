@@ -72,7 +72,7 @@ const platClusterIcon = makeClusterIcon('gcluster gcluster-plat')
 // focus: { key, pts } -> zoom to show all pts.
 export default function LeafletMap({
   points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
-  me, nearest, following, locked, onUnlock, focus, rain, areas, route, stops,
+  me, nearest, following, locked, onUnlock, focus, rain, areas, route, stops, picked, onPick, areaText,
 }) {
   const box = useRef(null)
   const map = useRef(null)
@@ -90,7 +90,7 @@ export default function LeafletMap({
   const quiet = useRef(false) // true while following moves the map: do not report every frame
   const cursor = useRef(null)
   const cb = useRef({})
-  cb.current = { onSelect, onView, active, locked, onUnlock }
+  cb.current = { onSelect, onView, active, locked, onUnlock, onPick, areaText }
 
   // Distance labels sit on their line, measured in screen pixels from the start.
   const placeLabels = (from) => {
@@ -108,8 +108,31 @@ export default function LeafletMap({
   // create the map once
   useEffect(() => {
     // maxZoom must be set before the cluster layer is added
-    const m = L.map(box.current, { zoomControl: false, preferCanvas: true, worldCopyJump: true, minZoom: 3, maxZoom: 19 })
+    // Double-click picks a place (shows its coordinates and area) instead of zooming in; zoom with the
+    // buttons, the wheel or two fingers. On a phone, press and hold does the same.
+    const m = L.map(box.current, { zoomControl: false, preferCanvas: true, worldCopyJump: true, minZoom: 3, maxZoom: 19, doubleClickZoom: false })
       .setView([view.lat, view.lng], view.zoom)
+    let lastPick = 0
+    const pick = (ll) => {
+      if (Date.now() - lastPick < 400) return // a long press can raise two events
+      lastPick = Date.now()
+      cb.current.onPick?.({ lat: ll.lat, lng: ll.lng })
+    }
+    m.on('dblclick', (e) => pick(e.latlng))
+    m.on('contextmenu', (e) => pick(e.latlng))
+    let hold = null
+    const stopHold = () => { clearTimeout(hold); hold = null }
+    box.current.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch' || e.target.closest('.leaflet-control, .leaflet-marker-icon, .leaflet-popup')) return
+      const { clientX, clientY } = e
+      stopHold()
+      hold = setTimeout(() => { hold = null; pick(m.mouseEventToLatLng({ clientX, clientY })) }, 650)
+      const move = (ev) => { if (Math.hypot(ev.clientX - clientX, ev.clientY - clientY) > 10) { stopHold(); off() } }
+      const off = () => { stopHold(); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', off); window.removeEventListener('pointercancel', off) }
+      window.addEventListener('pointermove', move)
+      window.addEventListener('pointerup', off)
+      window.addEventListener('pointercancel', off)
+    })
     L.control.zoom({ position: 'bottomright' }).addTo(m)
     L.control.scale({ position: 'bottomleft', imperial: false }).addTo(m)
     cluster.current = L.markerClusterGroup({
@@ -286,12 +309,31 @@ export default function LeafletMap({
         html: `<span style="background:${colorOf(selected.supplier)}"></span>`,
       }),
     }).addTo(m)
-    highlight.current.bindPopup(pointPopupHtml(selected, colorOf(selected.supplier)), { className: 'dark-popup', offset: [0, -10], maxWidth: 300 })
+    highlight.current.bindPopup(pointPopupHtml(selected, colorOf(selected.supplier), cb.current.areaText?.(selected) ?? ''), { className: 'dark-popup', offset: [0, -10], maxWidth: 300 })
     if (!cb.current.active) return
     m.flyTo(ll, Math.max(m.getZoom(), 16), { duration: 0.9 })
     const t = setTimeout(() => highlight.current?.openPopup(), 950)
     return () => clearTimeout(t)
   }, [selected, colorOf])
+
+  // the boundary file arrived after the popup was built: add the area line to it
+  const hasArea = !!areaText
+  useEffect(() => {
+    if (selected && highlight.current) highlight.current.setPopupContent(pointPopupHtml(selected, colorOf(selected.supplier), areaText?.(selected) ?? ''))
+  }, [hasArea]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // a place picked by double-click / long press: a popup with its coordinates and area
+  const pickPopup = useRef(null)
+  useEffect(() => {
+    const m = map.current
+    if (!picked) { pickPopup.current?.remove(); pickPopup.current = null; return }
+    if (pickPopup.current && pickPopup.current.__key === picked.key) { pickPopup.current.setContent(picked.html); return }
+    pickPopup.current?.remove()
+    const pp = L.popup({ className: 'dark-popup', maxWidth: 300, autoPanPadding: [30, 30] }).setLatLng([picked.lat, picked.lng]).setContent(picked.html)
+    pp.__key = picked.key
+    pp.openOn(m)
+    pickPopup.current = pp
+  }, [picked])
 
   // searched coordinate: red pin + popup
   useEffect(() => {

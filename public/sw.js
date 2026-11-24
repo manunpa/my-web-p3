@@ -9,7 +9,7 @@
  *
  * อัปเดตเวอร์ชัน: เปลี่ยน VERSION ทุกครั้งที่อยากล้าง Cache เก่าทิ้งทั้งหมด
  */
-const VERSION = '2026-11-23.1';
+const VERSION = '2026-11-25.1';
 const PREFIX = 'scc-fleet-';
 const CACHE = PREFIX + VERSION;
 
@@ -59,6 +59,9 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   // ไม่ Cache ตัว Service Worker เอง และไฟล์ตอนพัฒนา (vite dev server)
   if (url.pathname.endsWith('/sw.js') || url.pathname.includes('/@') || url.pathname.includes('/node_modules/')) return;
+  // ไฟล์ข้อมูลขนาดใหญ่ (ขอบเขตตำบล/อำเภอ/จังหวัด หลาย MB) ปล่อยให้เบราว์เซอร์เก็บแคชเอง ไม่ผ่านที่นี่
+  // (ผ่าน Service Worker แล้วโหลดไม่สำเร็จ และจะโหลดซ้ำทุกครั้งเพราะบังคับข้าม HTTP cache)
+  if (url.pathname.includes('/data/')) return;
 
   event.respondWith(networkFirst(event, req));
 });

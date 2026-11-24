@@ -11,8 +11,9 @@ import RoutePlanner from './RoutePlanner'
 import StreetViewPanel from './StreetViewPanel'
 import {
   loadGeofences, cachedGeofences, googleMapsLink, navLink, windyLink, parseCoords, OTHER_SUPPLIER_COLOR,
-  distanceKm, nearestTo, formatDist, loadStations, cachedStations, fuelInk,
+  distanceKm, nearestTo, formatDist, loadStations, cachedStations, fuelInk, placePopupHtml,
 } from './mapsData'
+import { loadAdmin, adminReady, areaOf, formatArea, areaSearchText } from './geoAdmin'
 import { useMyLocation, ACC_CIRCLE_MAX_M } from './myLocation'
 import { GOOGLE_MAPS_DAILY_LIMIT } from './mapsQuota'
 import LeafletMap from './LeafletMap'
@@ -191,9 +192,12 @@ export default function MapsPage() {
   // Street View panel (opens over the map; each opening is counted by streetViewQuota.js)
   const [sv, setSv] = useState(null)
 
-  // copy / Street View buttons inside map popups
+  // copy / Street View / add-to-plan buttons inside map popups
+  const addCoordRef = useRef(null) // the latest addCoordStop (defined further down)
   useEffect(() => {
     const onClick = async (e) => {
+      const addBtn = e.target.closest?.('.mpop-btn[data-addxy]')
+      if (addBtn) { e.preventDefault(); addCoordRef.current?.(addBtn.dataset.addxy); return }
       const svBtn = e.target.closest?.('.mpop-btn[data-sv]')
       if (svBtn) {
         e.preventDefault()
@@ -313,12 +317,50 @@ export default function MapsPage() {
     .map((s) => [s.name, s.color])), [data.suppliers, st.brands])
   const colorOf = useCallback((name) => colors.get(name) ?? OTHER_SUPPLIER_COLOR, [colors])
 
+  // Tambon / amphoe / province of any coordinate, from boundary data kept on this device. The file
+  // (a few MB) is loaded the first time it is needed: a double-click, a selected station, or a search.
+  const [adminOk, setAdminOk] = useState(adminReady())
+  const ensureAdmin = useCallback(() => (adminReady() ? Promise.resolve(true)
+    : loadAdmin().then(() => { setAdminOk(true); return true }).catch(() => false)), [])
+  const areaText = useMemo(() => (adminOk ? (p) => formatArea(areaOf(p.lat, p.lng)) : null), [adminOk])
+  // id -> lowercase area names of every customer / fuel station, so a search can match "บางนา" or "ชลบุรี"
+  const [areaIdx, setAreaIdx] = useState(null)
+  useEffect(() => {
+    if (!adminOk) return undefined
+    let alive = true
+    ;(async () => {
+      const m = new Map()
+      const all = [...data.points, ...st.points]
+      for (let i = 0; i < all.length; i++) {
+        m.set(all[i].id, areaSearchText(areaOf(all[i].lat, all[i].lng)))
+        if (i % 1500 === 1499) { await new Promise((r) => setTimeout(r)); if (!alive) return } // let the page breathe
+      }
+      if (alive) setAreaIdx(m)
+    })()
+    return () => { alive = false }
+  }, [adminOk, data.points, st.points])
+
   const term = typedPin ? '' : q.trim().toLowerCase() // a coordinate search shows every station, nearest first
   const matches = useCallback((p) => !term || p.name.toLowerCase().includes(term) || p.supplier.toLowerCase().includes(term)
     || `${p.lat},${p.lng}`.includes(term)
     || (p.station && `${p.station.where} ${p.station.address}`.toLowerCase().includes(term))
-    || (p.platform && `${p.platform.operator} ${p.platform.operatorE} ${p.platform.field} ${p.platform.block} ${p.platform.lease}`.toLowerCase().includes(term)),
-  [term])
+    || (p.platform && `${p.platform.operator} ${p.platform.operatorE} ${p.platform.field} ${p.platform.block} ${p.platform.lease}`.toLowerCase().includes(term))
+    || (areaIdx?.get(p.id)?.includes(term) ?? false),
+  [term, areaIdx])
+
+  // A place picked on the map (double-click, or press and hold): its coordinates and area.
+  const [picked, setPicked] = useState(null)
+  const onPick = useCallback(async ({ lat, lng }) => {
+    const key = Date.now()
+    const base = { key, lat, lng }
+    const fill = (status) => {
+      const a = status === 'done' ? areaOf(lat, lng) : null
+      setPicked((p) => (p?.key === key ? { ...base, status, areaText: a ? formatArea(a) : '', near: !!a?.near } : p))
+    }
+    setPicked({ ...base, status: adminReady() ? 'done' : 'loading', areaText: adminReady() ? formatArea(areaOf(lat, lng)) : '', near: !!(adminReady() && areaOf(lat, lng)?.near) })
+    if (!adminReady()) fill((await ensureAdmin()) ? 'done' : 'error')
+  }, [ensureAdmin])
+  const pickedWithHtml = useMemo(() => (picked ? { ...picked, html: placePopupHtml(picked) } : null), [picked])
 
   // Points drawn on the map: supplier / brand toggles + search.
   const shownGeo = useMemo(() => data.points.filter((p) => !hidden.has(p.supplier) && matches(p)), [data.points, hidden, matches])
@@ -417,6 +459,9 @@ export default function MapsPage() {
     setTimeout(() => setCopied(false), 1500)
   }
 
+  // a selected station shows its area too, so the boundary file is loaded when one is selected
+  useEffect(() => { if (selected) ensureAdmin() }, [selected, ensureAdmin])
+
   // tap the "nearest" bar: show that station (while following, stop pulling the map back to me)
   const goNearest = (p) => { setLocked(false); setSelected(p) }
 
@@ -493,6 +538,7 @@ export default function MapsPage() {
     addStop({ id: `xy:${c.lat.toFixed(6)},${c.lng.toFixed(6)}`, name: `พิกัด ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}`, lat: c.lat, lng: c.lng })
     return true
   }
+  addCoordRef.current = addCoordStop
   const addMeStop = () => {
     if (!me || plan.stops.some((x) => x.id === 'me')) return
     setStops((st0) => [{ id: 'me', name: 'ตำแหน่งของฉัน', lat: me.lat, lng: me.lng }, ...st0].slice(0, MAX_STOPS))
@@ -557,7 +603,7 @@ export default function MapsPage() {
   const mapProps = {
     points: shown, colorOf, selected, onSelect: setSelected, type, view: view.current, onView, fitKey, pin,
     me, nearest, following, locked: following && locked, onUnlock: () => setLocked(false), focus, rain, areas,
-    route: shownRoute, stops: plan.stops,
+    route: shownRoute, stops: plan.stops, picked: pickedWithHtml, onPick, areaText,
   }
 
   return (
@@ -611,7 +657,8 @@ export default function MapsPage() {
             <label className="f search">
               <Search size={15} />
               <input type="search" placeholder="ค้นหาชื่อสถานี ผู้ให้บริการ หรือพิกัด เช่น 13.7563, 100.5018" value={q}
-                onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && setPin(typedPin)}
+                onChange={(e) => { setQ(e.target.value); if (e.target.value.trim().length >= 2) ensureAdmin() }}
+                onKeyDown={(e) => e.key === 'Enter' && setPin(typedPin)}
                 aria-label="ค้นหาสถานีหรือพิกัด" />
             </label>
             <button type="button" className="icon-btn" onClick={reload} disabled={busy || st.status === 'loading'}
@@ -733,6 +780,7 @@ export default function MapsPage() {
               </div>
               <strong>{selected.name}</strong>
               <code>{selected.lat.toFixed(6)}, {selected.lng.toFixed(6)}</code>
+              {areaText && <p className="area-line" title="ขอบเขตการปกครอง: กรมแผนที่ทหาร ผ่าน OCHA/HDX (CC BY-IGO) ค่าโดยประมาณ">📍 {areaText(selected)}</p>}
               <div className="picked-actions">
                 <button type="button" className="more" onClick={() => copy(selected)}>
                   {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'คัดลอกแล้ว' : 'คัดลอกพิกัด'}
