@@ -488,6 +488,7 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .dups-title{margin:8px 0 2px;font-size:11px}
 .dup-row{display:flex;flex-direction:column;gap:1px;width:100%;padding:4px 0;border:0;background:none;color:var(--text);font:inherit;text-align:left;cursor:pointer}
 .dup-row:hover .pname{color:var(--gold-text)}
+.stop-marker span{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#1a73e8;border:2px solid #fff;box-sizing:border-box;color:#fff;font:700 12px/1 system-ui,sans-serif;box-shadow:0 2px 6px rgba(0,0,0,.45)}
 /* route planner (folded in the side panel) */
 .planner{border:1px solid var(--line);border-radius:12px;background:var(--field)}
 .planner>summary{display:flex;align-items:center;gap:6px;padding:9px 12px;cursor:pointer;font-size:13px;font-weight:600;list-style:none}
@@ -502,6 +503,12 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .stop-leg{flex:none;font-style:normal;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
 .stops .x{flex:none;display:grid;place-items:center;width:22px;height:22px;padding:0;border:0;border-radius:6px;background:none;color:var(--muted);cursor:pointer}
 .stops .x:hover{color:var(--text);background:rgb(var(--glow) / .15)}
+.planner-add{display:flex;gap:6px}
+.planner-add input{min-width:0;flex:1;height:30px;padding:0 10px;border-radius:9px;border:1px solid var(--line);background:var(--bg-field,var(--field));color:var(--text);font:inherit;font-size:12px}
+.planner-add .more{height:30px;padding:0 12px;font-size:12px}
+.planner-add .more:disabled{opacity:.5;cursor:not-allowed}
+.planner-focus{display:flex;align-items:flex-start;gap:7px;font-size:12px;line-height:1.4;cursor:pointer}
+.planner-focus input{margin-top:2px}
 .planner-actions{display:flex;flex-wrap:wrap;gap:6px}
 .planner-actions .more{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;font-size:12px;text-decoration:none;color:var(--text)}
 .planner-actions .more.primary{background:#1a73e8;border-color:#1a73e8;color:#fff}

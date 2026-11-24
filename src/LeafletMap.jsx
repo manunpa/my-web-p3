@@ -72,7 +72,7 @@ const platClusterIcon = makeClusterIcon('gcluster gcluster-plat')
 // focus: { key, pts } -> zoom to show all pts.
 export default function LeafletMap({
   points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
-  me, nearest, following, locked, onUnlock, focus, rain, areas, route,
+  me, nearest, following, locked, onUnlock, focus, rain, areas, route, stops,
 }) {
   const box = useRef(null)
   const map = useRef(null)
@@ -187,6 +187,19 @@ export default function LeafletMap({
       opacity: RAIN_OPACITY, maxNativeZoom: rainMax, maxZoom: RAIN_SHOW_MAX_ZOOM, zIndex: 10, attribution,
     }).addTo(map.current)
   }, [rainUrl, rainMax, rainCredit])
+
+  // route planner stops: numbered blue dots (at most 9)
+  const stopLayer = useRef(null)
+  useEffect(() => {
+    stopLayer.current?.remove()
+    stopLayer.current = null
+    if (!stops?.length) return
+    stopLayer.current = L.layerGroup(stops.map((s, i) => L.marker([s.lat, s.lng], {
+      zIndexOffset: 5000, title: `${i + 1}. ${s.name}`,
+      icon: L.divIcon({ className: 'stop-marker', html: `<span>${i + 1}</span>`, iconSize: [24, 24], iconAnchor: [12, 12] }),
+      interactive: false,
+    }))).addTo(map.current)
+  }, [stops])
 
   // driving route: a blue line with a white edge, zoomed to fit
   const routeLayer = useRef(null)

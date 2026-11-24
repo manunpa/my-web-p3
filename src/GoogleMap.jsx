@@ -96,7 +96,7 @@ const clusterSize = (n) => (n < 10 ? 34 : n < 100 ? 40 : n < 1000 ? 48 : 56)
  */
 export default function GoogleMap({
   points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
-  me, nearest, following, locked, onUnlock, focus, overlays, onFail, rain, areas, route,
+  me, nearest, following, locked, onUnlock, focus, overlays, onFail, rain, areas, route, stops,
 }) {
   const box = useRef(null)
   const map = useRef(null)
@@ -282,6 +282,19 @@ export default function GoogleMap({
       releaseTile: () => {},
     })
   }, [ready, rainUrl, rainMax])
+
+  // route planner stops: numbered blue dots (at most 9)
+  const stopMarkers = useRef([])
+  useEffect(() => {
+    if (!ready) return
+    const gm = window.google.maps
+    stopMarkers.current.forEach((m) => m.setMap(null))
+    stopMarkers.current = (stops ?? []).map((s, i) => new gm.Marker({
+      map: map.current, position: { lat: s.lat, lng: s.lng }, zIndex: 250000, clickable: false, title: `${i + 1}. ${s.name}`,
+      icon: { path: gm.SymbolPath.CIRCLE, scale: 12, fillColor: '#1a73e8', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 },
+      label: { text: String(i + 1), color: '#ffffff', fontWeight: '700', fontSize: '12px' },
+    }))
+  }, [ready, stops])
 
   // driving route: a blue line with a white edge, zoomed to fit
   const routeLines = useRef([])

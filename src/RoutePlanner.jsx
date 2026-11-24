@@ -12,11 +12,16 @@ const SHOW = 25
  * the first stop is the start.
  */
 export default function RoutePlanner({
-  stops, open, onToggle, busy, hasMe, onAddMe, onRemove, onClear, onOptimize, onBuild, onFuel,
-  route, along, radiusKm, googleLink, onPick, colorOf, fuelLoading,
+  stops, open, onToggle, busy, hasMe, onAddMe, onAddCoord, onRemove, onClear, onOptimize, onBuild, onFuel,
+  route, along, radiusKm, googleLink, onPick, colorOf, fuelLoading, focus, onFocus,
 }) {
   const [limit, setLimit] = useState(SHOW)
+  const [coord, setCoord] = useState('')
   const hasMeStop = stops.some((s) => s.id === 'me')
+  const submitCoord = (e) => {
+    e.preventDefault()
+    if (coord.trim() && onAddCoord(coord)) setCoord('')
+  }
   return (
     <details className="planner" open={open} onToggle={(e) => onToggle(e.currentTarget.open)}>
       <summary><Route size={14} /> วางแผนเส้นทาง{stops.length ? ` (${stops.length} จุด)` : ''}</summary>
@@ -36,6 +41,12 @@ export default function RoutePlanner({
             </li>
           ))}
         </ol>
+
+        <form className="planner-add" onSubmit={submitCoord}>
+          <input type="text" inputMode="decimal" autoComplete="off" value={coord} onChange={(e) => setCoord(e.target.value)}
+            placeholder="เพิ่มจุดจากพิกัด เช่น 13.7563, 100.5018" aria-label="เพิ่มจุดจากพิกัดละติจูด ลองจิจูด" />
+          <button type="submit" className="more" disabled={!coord.trim()}>เพิ่ม</button>
+        </form>
 
         <div className="planner-actions">
           {hasMe && !hasMeStop && (
@@ -72,6 +83,10 @@ export default function RoutePlanner({
                   onClick={() => { setLimit(SHOW); onFuel(r) }}>{r} กม.</button>
               ))}
             </div>
+            <label className="planner-focus">
+              <input type="checkbox" checked={focus} onChange={(e) => onFocus(e.target.checked)} />
+              แสดงเฉพาะปั๊มตามเส้นทางและจุดแวะ (ซ่อนสถานีอื่นบนแผนที่)
+            </label>
             <p className="muted planner-count">
               {along.items.length === 0 ? 'ไม่พบปั๊มในระยะนี้ ลองขยายระยะ' : `พบ ${along.items.length} แห่ง เรียงตามลำดับตลอดเส้นทาง`}
             </p>

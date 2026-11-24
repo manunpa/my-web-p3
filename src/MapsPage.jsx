@@ -55,6 +55,7 @@ const store = {
 }
 
 const distKm = distanceKm
+const EMPTY = [] // a stable empty list (so memos that depend on it do not run again)
 
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true } catch {
@@ -331,10 +332,20 @@ export default function MapsPage() {
   const [alongLoading, setAlongLoading] = useState(false)
   // Fuel stations near the planned route are drawn even when the fuel layer is off (only those, a few dozen).
   const shownAlong = useMemo(() => (!showSt && plan.along ? plan.along.items.map((i) => i.p) : []), [showSt, plan.along])
-  const shown = useMemo(
+  const shownAll = useMemo(
     () => (shownSt.length || shownPlat.length || shownAlong.length ? [...shownGeo, ...shownSt, ...shownPlat, ...shownAlong] : shownGeo),
     [shownGeo, shownSt, shownPlat, shownAlong],
   )
+  // With the fuel stations near the route listed, only those and the stops stay on the map (the
+  // other thousands of stations are hidden) until the switch in the planner is turned off.
+  const [planFocus, setPlanFocus] = useState(true)
+  const focusActive = !!plan.along && planFocus
+  const shown = useMemo(() => {
+    if (!focusActive) return shownAll
+    const keep = new Set(plan.along.items.map((i) => i.p.id))
+    plan.stops.forEach((s) => keep.add(s.id))
+    return shownAll.filter((p) => keep.has(p.id))
+  }, [focusActive, shownAll, plan.along, plan.stops])
   // Concession areas are drawn whole (they are not searched or filtered).
   const areas = showOff && showAreas ? off.areas : null
 
@@ -342,12 +353,13 @@ export default function MapsPage() {
   // the map. With every customer station hidden, the 5 closest fuel stations, and with those hidden
   // too, the 5 closest offshore platforms. With both customer and fuel layers showing, the closest
   // fuel station is added to the "nearest" bar.
-  const nearPool = shownGeo.length ? shownGeo : shownSt.length ? shownSt : shownPlat
+  // While the route view hides the other stations, the dashed lines to them are hidden too.
+  const nearPool = focusActive ? EMPTY : shownGeo.length ? shownGeo : shownSt.length ? shownSt : shownPlat
   shownRef.current = nearPool
   const lineFrom = me ?? pin
   const nearest = useMemo(() => (lineFrom ? nearestTo(lineFrom, nearPool, 5) : []), [lineFrom, nearPool])
-  const nearestPump = useMemo(() => (lineFrom && shownGeo.length && shownSt.length ? nearestTo(lineFrom, shownSt, 1)[0] : null),
-    [lineFrom, shownGeo.length, shownSt])
+  const nearestPump = useMemo(() => (lineFrom && !focusActive && shownGeo.length && shownSt.length ? nearestTo(lineFrom, shownSt, 1)[0] : null),
+    [lineFrom, focusActive, shownGeo.length, shownSt])
 
   // Points listed in the sidebar: same, optionally only inside the visible map area (nearest first).
   // With my location or a searched coordinate, distances are measured from it instead of the map center.
@@ -473,6 +485,14 @@ export default function MapsPage() {
     setPlanOpen(true)
     say(`เพิ่ม "${s.name}" ในแผนเส้นทางแล้ว`, 2500)
   }
+  // A stop typed as "lat, lng" (or a Google Maps link). Returns true when it was added.
+  const addCoordStop = (text) => {
+    const c = parseCoords(text)
+    if (!c) { say('พิกัดไม่ถูกต้อง พิมพ์เป็น ละติจูด, ลองจิจูด เช่น 13.7563, 100.5018', 4500); return false }
+    if (plan.stops.length >= MAX_STOPS) { say(`เพิ่มได้สูงสุด ${MAX_STOPS} จุด`, 3500); return false }
+    addStop({ id: `xy:${c.lat.toFixed(6)},${c.lng.toFixed(6)}`, name: `พิกัด ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}`, lat: c.lat, lng: c.lng })
+    return true
+  }
   const addMeStop = () => {
     if (!me || plan.stops.some((x) => x.id === 'me')) return
     setStops((st0) => [{ id: 'me', name: 'ตำแหน่งของฉัน', lat: me.lat, lng: me.lng }, ...st0].slice(0, MAX_STOPS))
@@ -537,7 +557,7 @@ export default function MapsPage() {
   const mapProps = {
     points: shown, colorOf, selected, onSelect: setSelected, type, view: view.current, onView, fitKey, pin,
     me, nearest, following, locked: following && locked, onUnlock: () => setLocked(false), focus, rain, areas,
-    route: shownRoute,
+    route: shownRoute, stops: plan.stops,
   }
 
   return (
@@ -663,7 +683,8 @@ export default function MapsPage() {
           </div>
 
           <RoutePlanner
-            stops={plan.stops} open={planOpen} onToggle={setPlanOpen} busy={planBusy} hasMe={!!me} onAddMe={addMeStop}
+            stops={plan.stops} open={planOpen} onToggle={setPlanOpen} busy={planBusy} hasMe={!!me} onAddMe={addMeStop} onAddCoord={addCoordStop}
+            focus={planFocus} onFocus={setPlanFocus}
             onRemove={removeStop} onClear={clearPlan} onOptimize={optimizePlan} onBuild={buildPlan} onFuel={planFuel}
             route={plan.route} along={plan.along} radiusKm={plan.along?.radiusKm ?? (plan.route?.km > 200 ? 2 : 5)} googleLink={googleDirections(plan.stops)}
             onPick={pickAlong} colorOf={colorOf} fuelLoading={alongLoading}
