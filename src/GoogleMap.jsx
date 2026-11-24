@@ -15,7 +15,9 @@ const distIcon = (gm, text, i) => {
   return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg), scaledSize: new gm.Size(w, h), anchor: new gm.Point(w / 2, h / 2) }
 }
 
-const myIcon = (gm, heading) => (heading === null
+const DASH_PERIOD_PX = 12 // length of one dash + gap on the nearest-station lines
+
+const myIcon =(gm, heading) => (heading === null
   ? { path: gm.SymbolPath.CIRCLE, scale: 8, fillColor: '#1a73e8', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3 }
   : { path: gm.SymbolPath.FORWARD_CLOSED_ARROW, scale: 6, rotation: heading, fillColor: '#1a73e8', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 })
 
@@ -358,15 +360,35 @@ export default function GoogleMap({
     if (!from) return
     nearest.forEach(({ p, km }, i) => {
       const s = nearStyle(i), to = { lat: p.lat, lng: p.lng }
+      // The dashes are repeated symbols along the line; the flow animation below moves their offset.
+      const icon = { path: 'M 0,-1 0,1', strokeColor: s.color, strokeOpacity: s.opacity, scale: s.weight }
       const line = new gm.Polyline({
         map: map.current, path: [from, to], clickable: false, strokeOpacity: 0, zIndex: 50 - i,
-        icons: [{ icon: { path: 'M 0,-1 0,1', strokeColor: s.color, strokeOpacity: s.opacity, scale: s.weight }, offset: '0', repeat: '12px' }],
+        icons: [{ icon, offset: '0px', repeat: DASH_PERIOD_PX + 'px' }],
       })
       const label = new gm.Marker({ map: map.current, position: from, clickable: false, zIndex: 150000 - i, icon: distIcon(gm, formatDist(km), i) })
-      pairs.current.push({ line, label, to, i })
+      pairs.current.push({ line, label, to, i, icon })
     })
     placeLabels(from)
   }, [ready, nearest, pin, me]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Flowing dashes, like the OpenStreetMap map: the nearest line runs faster than the others.
+  // Runs only while this map is visible and the tab is in front, and not for people who asked for less motion.
+  useEffect(() => {
+    if (!ready || !active || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    let raf = 0, last = 0
+    const frame = (now) => {
+      raf = requestAnimationFrame(frame)
+      if (document.hidden || now - last < 40) return // about 25 updates a second is plenty
+      last = now
+      for (const pr of pairs.current) {
+        const period = pr.i === 0 ? 700 : 1000 // ms for one dash length
+        pr.line.set('icons', [{ icon: pr.icon, offset: `${((now % period) / period) * DASH_PERIOD_PX}px`, repeat: DASH_PERIOD_PX + 'px' }])
+      }
+    }
+    raf = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(raf)
+  }, [ready, active])
 
   // pressing "back to me" while following: move the map back
   useEffect(() => {
