@@ -20,8 +20,8 @@ const DocumentsPage = lazy(() => import('./DocumentsPage'))
 const ReportsPage = lazy(() => import('./ReportsPage'))
 
 // How long a sign-in lasts before the user is signed out automatically.
-// Keep in sync with duration.value(30, 'm') in firestore.rules.
-const SESSION_MS = 30 * 60 * 1000
+// Keep in sync with duration.value(120, 'm') in firestore.rules.
+const SESSION_MS = 2 * 60 * 60 * 1000 // 2 hours
 
 // Protected pages, by hash: '#/' -> Home. Add new pages here, e.g. '/profile': Profile,
 // and link to them with href="#/profile". Every page in this list requires sign-in.
@@ -131,7 +131,7 @@ function Screen() {
     <>
       <SessionTimer
         deadline={deadline}
-        onExpire={() => end('Your session expired after 30 minutes. Please sign in again.')}
+        onExpire={() => end('Your session expired after 2 hours. Please sign in again.')}
       />
       <PageErrorBoundary key={route}>
         <Suspense fallback={<div className="stage" />}>
