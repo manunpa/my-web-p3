@@ -78,7 +78,7 @@ const clusterSize = (n) => (n < 10 ? 34 : n < 100 ? 40 : n < 1000 ? 48 : 56)
  */
 export default function GoogleMap({
   points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
-  me, nearest, following, locked, onUnlock, focus, overlays,
+  me, nearest, following, locked, onUnlock, focus, overlays, onFail,
 }) {
   const box = useRef(null)
   const map = useRef(null)
@@ -96,7 +96,11 @@ export default function GoogleMap({
   const [ready, setReady] = useState(false)
   const [error, setError] = useState(authFailed ? 'auth' : null)
   const live = useRef({})
-  live.current = { onSelect, onView, colorOf, active, locked, onUnlock, me, following, nearest }
+  live.current = { onSelect, onView, colorOf, active, locked, onUnlock, me, following, nearest, onFail }
+
+  // Google Maps cannot be used (daily limit reached, key refused, script or quota check failed):
+  // tell the page, which switches to OpenStreetMap by itself.
+  useEffect(() => { if (error) live.current.onFail?.(error) }, [error])
 
   // Distance labels sit on their line, measured in screen pixels from the start.
   const placeLabels = (from) => {

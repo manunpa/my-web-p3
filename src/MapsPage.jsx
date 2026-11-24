@@ -8,6 +8,7 @@ import {
   distanceKm, nearestTo, formatDist, loadStations, cachedStations, fuelInk,
 } from './mapsData'
 import { useMyLocation } from './myLocation'
+import { GOOGLE_MAPS_DAILY_LIMIT } from './mapsQuota'
 import LeafletMap from './LeafletMap'
 import GoogleMap, { preloadGoogleMaps } from './GoogleMap'
 
@@ -198,6 +199,20 @@ export default function MapsPage() {
     setFitKey(0) // keep the current view when switching
   }
 
+  // Google Maps failed (daily limit reached, key refused, script not loaded, quota check failed):
+  // go back to OpenStreetMap right away and keep the Google button off until the page is reloaded.
+  const [googleDown, setGoogleDown] = useState(null)
+  const onGoogleFail = useCallback((reason) => {
+    const why = reason === 'quota' ? `วันนี้ใช้ Google Maps ครบ ${GOOGLE_MAPS_DAILY_LIMIT} ครั้งแล้ว (นับใหม่ตอนเที่ยงคืน)`
+      : reason === 'auth' ? 'Google Maps ใช้ไม่ได้ (key ถูกปฏิเสธ)'
+        : 'โหลด Google Maps ไม่สำเร็จ'
+    setGoogleDown(why)
+    setEngine((e) => (e === 'google' ? 'osm' : e))
+    setOpened((o) => (o.has('osm') ? o : new Set(o).add('osm'))) // this visit may have started on Google
+    setType((t) => (TYPES.osm.some((x) => x.id === t) ? t : 'satellite'))
+    say(`${why} — สลับไปใช้ OpenStreetMap ให้อัตโนมัติ`, 8000)
+  }, [say])
+
   const colors = useMemo(() => new Map([...data.suppliers, ...st.brands].map((s) => [s.name, s.color])), [data.suppliers, st.brands])
   const colorOf = useCallback((name) => colors.get(name) ?? OTHER_SUPPLIER_COLOR, [colors])
 
@@ -281,7 +296,9 @@ export default function MapsPage() {
           <div className="seg-ctl" role="radiogroup" aria-label="ผู้ให้บริการแผนที่">
             {ENGINES.map((e) => (
               <button key={e.id} type="button" role="radio" aria-checked={engine === e.id}
-                onPointerEnter={e.id === 'google' ? () => preloadGoogleMaps().catch(() => {}) : undefined}
+                disabled={e.id === 'google' && !!googleDown}
+                title={e.id === 'google' && googleDown ? `${googleDown} — รีเฟรชหน้าเพื่อลองใหม่` : undefined}
+                onPointerEnter={e.id === 'google' && !googleDown ? () => preloadGoogleMaps().catch(() => {}) : undefined}
                 className={engine === e.id ? 'on' : ''} onClick={() => switchEngine(e.id)}>{e.label}</button>
             ))}
           </div>
@@ -449,7 +466,7 @@ export default function MapsPage() {
             <>
               {/* Both maps stay alive once opened, so switching back and forth is instant. */}
               {opened.has('osm') && <LeafletMap active={engine === 'osm'} {...mapProps} />}
-              {opened.has('google') && <GoogleMap active={engine === 'google'} overlays={overlays} {...mapProps} />}
+              {opened.has('google') && <GoogleMap active={engine === 'google'} overlays={overlays} onFail={onGoogleFail} {...mapProps} />}
 
               {me && nearest[0] && (
                 <div className={`near-bar${following ? ' following' : ''}`}>

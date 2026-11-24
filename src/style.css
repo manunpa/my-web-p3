@@ -74,6 +74,7 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .seg-ctl{display:inline-flex;padding:3px;border-radius:12px;background:var(--field);border:1px solid var(--line)}
 .seg-ctl button{height:32px;min-width:52px;padding:0 12px;border:0;border-radius:9px;background:none;color:var(--muted);font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background .25s,color .25s}
 .seg-ctl button:hover{color:var(--text)}
+.seg-ctl button:disabled{opacity:.4;cursor:not-allowed;text-decoration:line-through}
 .seg-ctl button.on{background:var(--gold);color:var(--ink);box-shadow:0 4px 16px rgb(var(--glow) / .3)}
 .panel{position:relative;min-width:0;padding:18px;border-radius:20px;background:var(--card);border:1px solid var(--line);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 20px 60px rgba(0,0,0,.45);animation:rise .7s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i,0)*80ms);transition:transform .25s ease,box-shadow .25s}
 .panel::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:radial-gradient(240px circle at var(--cx,50%) var(--cy,0%),rgb(var(--glow) / .9),transparent 60%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:0;transition:opacity .3s;pointer-events:none}
