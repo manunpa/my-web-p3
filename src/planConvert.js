@@ -94,14 +94,14 @@ export function findDate(s) {
 
 // Reads a date and/or time from a cell: Excel numbers, "14:00 น.", "11:00:น.", "10;30", "16.00น.",
 // "ออกเวลา 5.00น.", "12/11/2569 06.00 น.".
-export function parseWhen(v) {
+export function parseWhen(v, timeColumn = false) {
   v = clean(v)
   if (v == null) return null
   if (typeof v === 'number') {
     if (v < 0) return null
     // Some source plans store a time as an integer hour (for example 9 with a 0.00 format),
     // rather than Excel's fractional-day time. In a time column, small whole numbers are hours.
-    if (Number.isInteger(v) && v <= 23) return { time: { h: v, mi: 0 } }
+    if (timeColumn && Number.isInteger(v) && v <= 23) return { time: { h: v, mi: 0 } }
     if (v < 1) return { time: serialTime(v) }
     const date = serialDate(v)
     return v % 1 ? { date, time: serialTime(v) } : { date }
@@ -271,7 +271,7 @@ export function convertSheet(rows, opts) {
     const customer = text(get(row, 'customer'))
     const qtyCell = get(row, 'qty')
     const qty = num(qtyCell)
-    const arrive = parseWhen(get(row, 'arrive'))
+    const arrive = parseWhen(get(row, 'arrive'), true)
     // Customer rows are the source of truth: keep them even if time/qty/order formatting
     // is unfamiliar. Only known instruction rows (currently "เติมเก็บ") are excluded.
     const isDrop = customer && !/^เติมเก็บ$/i.test(customer.trim())
@@ -285,7 +285,7 @@ export function convertSheet(rows, opts) {
       const count = (perPlate.get(group.plate) || 0) + 1
       perPlate.set(group.plate, count)
       const whenCell = (f) => {
-        const w = parseWhen(get(row, f))
+        const w = parseWhen(get(row, f), true)
         if (w && !w.date) { // a date written on the line below, e.g. "(22/11/69)"
           const below = rows[r + 1] && clean(rows[r + 1][cols[f]])
           const d = below != null && typeof below === 'string' && !parseWhen(below)?.time ? findDate(below) : null
@@ -491,7 +491,7 @@ export async function writeXlsx(rows) {
         return d ? new Date(Date.UTC(d.y, d.m - 1, d.d)) : v
       }
       if (DATETIME_COLS.includes(i)) {
-        const w = parseWhen(v)
+        const w = parseWhen(v, true)
         if (w?.date && w.time) return new Date(Date.UTC(w.date.y, w.date.m - 1, w.date.d, w.time.h, w.time.mi, w.time.s || 0))
         return v
       }
