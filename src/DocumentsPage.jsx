@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Upload, FileSpreadsheet, Download, X, AlertTriangle, Loader2, Plus, Trash2, RotateCcw, Route, RefreshCw,
 } from 'lucide-react'
-import { loadDistances, findMatch } from './distanceData'
+import { loadDistances, findMatch, findGeofence } from './distanceData'
 import {
   OUT_HEAD, readBook, readSheet, pickSheet, sheetDate, guessDepot, convertSheet, toRows, numberRows,
   writeXlsx, fmtYmd, toInputDate, fromInputDate,
@@ -121,7 +121,9 @@ export default function DocumentsPage() {
           const hit = findMatch(dist.index, cells[4], depot)
           if (hit) { cells[6] = hit.distance; autoKm = true; if (hit.fuzzy) closeTo = hit.name }
         }
-        return { ...r, added: r.key.startsWith('n'), cells, autoKm, autoDepot, closeTo }
+        // Name of this customer in the map (Geofence), from the distance sheet. Shown only, never exported.
+        const geofence = dist.index && cells[4] ? findGeofence(dist.index, cells[4], depot) : null
+        return { ...r, added: r.key.startsWith('n'), cells, autoKm, autoDepot, closeTo, geofence }
       })
   }, [base, added, removed, edits, dist.index])
   const kmFilled = table.filter((r) => r.autoKm).length
@@ -269,7 +271,12 @@ export default function DocumentsPage() {
             {drops > 0 && (
               <div className="table-scroll">
                 <table className="orders conv-table">
-                  <thead><tr><th aria-label="จัดการแถว" />{OUT_HEAD.map((h) => <th key={h}>{h}</th>)}</tr></thead>
+                  <thead>
+                    <tr>
+                      <th aria-label="จัดการแถว" />{OUT_HEAD.map((h) => <th key={h}>{h}</th>)}
+                      <th className="geo-col" title="แสดงให้ดูเท่านั้น ไม่อยู่ในไฟล์ Excel ที่ส่งออก">ชื่อใน Geofence <small>(ดูอย่างเดียว)</small></th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {table.map((r, i) => (
                       <tr key={r.key} className={`${r.start ? 'first' : ''}${r.added ? ' added' : ''}`}>
@@ -295,6 +302,11 @@ export default function DocumentsPage() {
                             />
                           </td>
                         )))}
+                        <td className="geo-col" title={r.geofence?.fuzzy ? `ชื่อใกล้เคียง: "${r.geofence.sheetName}" ในชีทระยะทาง` : undefined}>
+                          {r.geofence?.name
+                            ? <span className={r.geofence.fuzzy ? 'close' : ''}>{r.geofence.name}</span>
+                            : <span className="muted">{r.cells[4] ? (r.geofence ? 'ไม่มีชื่อในชีท' : 'ไม่พบลูกค้า') : ''}</span>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

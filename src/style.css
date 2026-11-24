@@ -674,3 +674,8 @@ input[type=date],input[type=datetime-local],input[type=time],input[type=month]{m
   .table-scroll{overflow:visible!important}
   body{background:#fff!important}
 }
+/* Plan converter: Geofence name column, shown only (not exported) */
+.conv-table th.geo-col,.conv-table td.geo-col{background:rgba(137,135,129,.07);border-left:2px dashed var(--line);white-space:nowrap;font-size:12px;color:var(--muted)}
+.conv-table th.geo-col small{display:block;font-weight:400;font-size:10.5px}
+.conv-table td.geo-col span:not(.muted){color:var(--text)}
+.conv-table td.geo-col .close{color:#ea580c}

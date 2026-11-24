@@ -37,6 +37,7 @@ const DIST_HEADERS = {
   // ไม่ใช่คอลัมน์ระยะทาง แม้มีคำว่าระยะ: "ชื่อลูกค้า (ไฟล์ระยะทาง)",
   // "ลำดับ | สีเขียว = ระยะทางเติมจาก ..." (เป็นเลขลำดับ 1, 2, 3 ...)
   notDistance: /ชื่อ|name|ลำดับ|รหัส|^no\b|seq/i,
+  geofence: /geofence/i, // "ชื่อใน Geofence": แสดงในหน้าแปลงแผนงานให้ดูเฉยๆ (ไม่ส่งออกไปกับไฟล์)
 }
 
 function doGet() {
@@ -92,6 +93,7 @@ function readDistances_() {
         depot: cols.depot >= 0 ? String(row[cols.depot] || '').trim() || name : name,
         customer: customer,
         distance: distance,
+        geofence: cols.geofence >= 0 ? String(row[cols.geofence] || '').trim() : '',
       })
       count++
     }
@@ -101,6 +103,7 @@ function readDistances_() {
         depot: cols.depot >= 0 ? values[h][cols.depot] : '(ชื่อแท็บ)',
         customer: values[h][cols.customer],
         distance: values[h][cols.distance],
+        geofence: cols.geofence >= 0 ? values[h][cols.geofence] : '(ไม่มี)',
       },
       count: count,
     })
@@ -111,11 +114,12 @@ function readDistances_() {
 
 // customerHeader: ชื่อคอลัมน์ลูกค้าที่กำหนดไว้ใน DIST_CUSTOMER_COLUMN (ไม่สนช่องว่าง) หรือ undefined = หาให้เอง
 function findCols_(header, customerHeader) {
-  const cols = { depot: -1, customer: -1, distance: -1 }
+  const cols = { depot: -1, customer: -1, distance: -1, geofence: -1 }
   const want = customerHeader ? String(customerHeader).replace(/\s+/g, '') : ''
   header.forEach((cell, i) => {
     const s = String(cell || '').replace(/\s+/g, '')
     if (!s) return
+    if (DIST_HEADERS.geofence.test(s)) { if (cols.geofence < 0) cols.geofence = i; return }
     if (want) {
       if (s === want) { cols.customer = i; return }
     } else if (cols.customer < 0 && DIST_HEADERS.customer.test(s) && !DIST_HEADERS.distance.test(s)) {

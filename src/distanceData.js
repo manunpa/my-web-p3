@@ -36,6 +36,12 @@ const normDepot = (s) => {
   return /บางปะกง/.test(t) ? 'bpk' : t.replace(/^คลัง/, '')
 }
 
+// The sheet's "ชื่อใน Geofence" cell; "ไม่พบใน Geofence", "-" and blanks count as none.
+const cleanGeofence = (s) => {
+  const t = String(s ?? '').trim()
+  return !t || t === '-' || /ไม่พบ|ไม่มี/.test(t) ? '' : t
+}
+
 function buildIndex(rows) {
   const byName = new Map() // normalized customer -> [{ depot, distance }]
   for (const r of rows) {
@@ -46,6 +52,7 @@ function buildIndex(rows) {
     byName.get(key).push({
       depot: normDepot(r.depot), sheet: normDepot(r.sheet), distance: km, code: depotCode(r.depot, r.sheet),
       name: String(r.customer).trim(),
+      geofence: cleanGeofence(r.geofence),
     })
   }
   return { byName, count: rows.length }
@@ -122,10 +129,22 @@ function closestKey(index, customer) {
   return hit
 }
 
-// Distance (and the depot it is from) for a customer -> { distance, depot, fuzzy, name } or null.
+// Distance (and the depot it is from) for a customer -> { distance, depot, fuzzy, name, geofence } or null.
 // Prefers a row of the same depot (or a tab named after it); without a depot match it is used
 // only when every row for that customer gives the same distance.
 export function findMatch(index, customer, depot) {
+  const hit = lookup(index, customer, depot)
+  return hit && hit.distance !== null ? hit : null
+}
+
+// The sheet's Geofence name for a customer, shown on the page only. Found even when the distance is
+// ambiguous: the row of the same depot first, otherwise the first row that has one.
+export function findGeofence(index, customer, depot) {
+  const hit = lookup(index, customer, depot)
+  return hit ? { name: hit.geofence, fuzzy: hit.fuzzy, sheetName: hit.name } : null
+}
+
+function lookup(index, customer, depot) {
   if (!index || !String(customer ?? '').trim()) return null
   let list = index.byName.get(normName(customer)) ?? index.byName.get(normName(stripNote(customer)))
   let fuzzy = false
@@ -136,7 +155,13 @@ export function findMatch(index, customer, depot) {
   }
   if (!list?.length) return null
   const hit = pickRow(list, depot)
-  return hit && { ...hit, fuzzy, name: list[0].name }
+  return {
+    distance: hit?.distance ?? null,
+    depot: hit?.depot ?? null,
+    geofence: hit?.geofence || list.find((x) => x.geofence)?.geofence || '',
+    fuzzy,
+    name: list[0].name,
+  }
 }
 
 function pickRow(list, depot) {
@@ -146,12 +171,12 @@ function pickRow(list, depot) {
     // Tab "Atlas-BPK" belongs to depot BPK, "Atlas-SRC" to SRC.
     const same = list.find((x) => (want && x.code === want) || x.depot === d || x.sheet === d || x.depot.includes(d) || x.sheet.includes(d)
       || (x.depot && d.includes(x.depot)))
-    if (same) return { distance: same.distance, depot: same.code }
+    if (same) return { distance: same.distance, depot: same.code, geofence: same.geofence }
   }
   if (!list.every((x) => x.distance === list[0].distance)) return null
   // Same distance everywhere: name the depot only when every row agrees on it.
   const codes = new Set(list.map((x) => x.code))
-  return { distance: list[0].distance, depot: codes.size === 1 ? list[0].code : null }
+  return { distance: list[0].distance, depot: codes.size === 1 ? list[0].code : null, geofence: list[0].geofence }
 }
 
 export function findDistance(index, customer, depot) {
