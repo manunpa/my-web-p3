@@ -137,7 +137,23 @@ export default function DocumentsPage() {
           ? (closeTo ? `ฐานข้อมูลระยะทาง (ชื่อใกล้เคียง "${closeTo}")` : 'ฐานข้อมูลระยะทาง') : 'ไฟล์แผน'
         return { ...r, added: r.key.startsWith('n'), cells, autoKm, autoDepot, closeTo, geofence, kmSource, typed7: typed(7), typed8: typed(8) }
       })
-    if (mode !== 'calc') return out
+    if (mode !== 'calc') {
+      // In plan-only mode, let PlanCheck calculate a trip when its first drop has a distance.
+      // Keep the plan's times only when there is no distance for that trip.
+      for (let i = 0; i < out.length; i++) {
+        if (!out[i].start && i !== 0) continue
+        let j = i + 1
+        while (j < out.length && !out[j].start) j++
+        const head = out[i]
+        if (!blank(head.cells[6])) {
+          head.cells[7] = null
+          head.cells[8] = null
+          head.autoPlanTimesCleared = true
+        }
+        i = j - 1
+      }
+      return out
+    }
     // Calculated times: trip by trip. A time typed in the table still wins. Only the two time
     // columns change, so the exported form stays the same; the notes are shown on the page only.
     const unitOf = (key) => files.find((f) => key.startsWith(`${f.id}:`))?.depot?.trim() || null
@@ -360,13 +376,11 @@ export default function DocumentsPage() {
                 </span>
               )}
               {mode === 'plan' && (
-                <span className="muted">
-                  PlanCheck ใช้เวลาออกตามไฟล์ถ้ามี (ไม่สนระยะทาง) และคำนวณจากระยะทางเฉพาะเที่ยวที่ไม่มีเวลาออก
-                  {pcCalc > 0 && ` · ไม่มีเวลาออกแต่มีระยะทาง ${pcCalc} เที่ยว: PlanCheck จะคำนวณให้ (เลือก "คำนวณให้ใหม่" เพื่อดูผลก่อน)`}
-                  {pcCannot > 0 && <b className="conv-warn-count"> · ไม่มีทั้งเวลาออกและระยะทาง {pcCannot} เที่ยว: คำนวณไม่ได้ ควรเติมก่อนนำเข้า</b>}
-                  <br />
-                  <b className="conv-warn-count">หมายเหตุ:</b> ถ้าเที่ยวไหนมีระยะทางและต้องการให้ PlanCheck คำนวณเวลาออกจากระยะทาง ให้ลบเวลาออกเดินทางตามแผนของเที่ยวนั้นก่อนส่งออก เพราะระบบจะยึดเวลาที่ระบุไว้ก่อน หากไม่มีระยะทาง ให้คงเวลาออกตามแผนไว้
-                </span>
+                <div style={{ color: '#991b1b', background: '#fef2f2', border: '1px solid #fca5a5', borderLeft: '4px solid #dc2626', borderRadius: 8, padding: '10px 12px', marginTop: 8, lineHeight: 1.55 }}>
+                  <b>หมายเหตุสำคัญ:</b> เที่ยวที่มีข้อมูลระยะทาง ระบบจะเว้นเวลาออกเดินทางตามแผนและเวลาเริ่มงานไว้ ให้ PlanCheck คำนวณจากระยะทาง ส่วนเที่ยวที่ไม่มีข้อมูลระยะทางจะคงเวลาตามแผนไว้
+                  <br /><b>กรุณาตรวจสอบกำหนดการวันที่และเวลาที่ต้องถึงลูกค้าให้ถูกต้องก่อนส่งออก</b>
+                  {pcCannot > 0 && <><br /><b>เที่ยวที่ไม่มีทั้งระยะทางและเวลาออก {pcCannot} เที่ยวจะคำนวณไม่ได้ กรุณาตรวจสอบข้อมูลก่อนนำเข้า</b></>}
+                </div>
               )}
             </div>
             <p className={`conv-km${dist.status === 'error' ? ' bad' : ''}`}>
