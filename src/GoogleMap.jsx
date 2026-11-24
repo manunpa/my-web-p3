@@ -96,7 +96,7 @@ const clusterSize = (n) => (n < 10 ? 34 : n < 100 ? 40 : n < 1000 ? 48 : 56)
  */
 export default function GoogleMap({
   points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
-  me, nearest, following, locked, onUnlock, focus, overlays, onFail, rain, areas, route, stops, picked, onPick, areaText,
+  me, nearest, following, locked, onUnlock, focus, overlays, onFail, rain, areas, route, stops, picked, onPick, areaText, vias, onRouteClick, onViaDrag,
 }) {
   const box = useRef(null)
   const map = useRef(null)
@@ -115,7 +115,7 @@ export default function GoogleMap({
   const [ready, setReady] = useState(false)
   const [error, setError] = useState(authFailed ? 'auth' : null)
   const live = useRef({})
-  live.current = { onSelect, onView, colorOf, active, locked, onUnlock, me, following, nearest, onFail, onPick, areaText }
+  live.current = { onSelect, onView, colorOf, active, locked, onUnlock, me, following, nearest, onFail, onPick, areaText, onRouteClick, onViaDrag }
 
   // Google Maps cannot be used (daily limit reached, key refused, script or quota check failed):
   // tell the page, which switches to OpenStreetMap by itself.
@@ -326,6 +326,22 @@ export default function GoogleMap({
     }))
   }, [ready, stops])
 
+  // via points of the planner's route: drag one to make the route go another way
+  const viaMarkers = useRef([])
+  useEffect(() => {
+    if (!ready) return
+    const gm = window.google.maps
+    viaMarkers.current.forEach((m) => m.setMap(null))
+    viaMarkers.current = (vias ?? []).map((v, i) => {
+      const mk = new gm.Marker({
+        map: map.current, position: { lat: v.lat, lng: v.lng }, draggable: true, zIndex: 260000, title: 'จุดผ่าน: ลากเพื่อปรับเส้นทาง',
+        icon: { path: gm.SymbolPath.CIRCLE, scale: 8, fillColor: '#ffffff', fillOpacity: 1, strokeColor: '#1a73e8', strokeWeight: 3 },
+      })
+      mk.addListener('dragend', (e) => live.current.onViaDrag?.(i, { lat: e.latLng.lat(), lng: e.latLng.lng() }))
+      return mk
+    })
+  }, [ready, vias])
+
   // driving route: a blue line with a white edge, zoomed to fit
   const routeLines = useRef([])
   useEffect(() => {
@@ -339,7 +355,15 @@ export default function GoogleMap({
       map: map.current, path, clickable: false, strokeColor: color, strokeWeight: weight, strokeOpacity: 0.95, zIndex: z,
     })
     routeLines.current = [line('#ffffff', 9, 60), line('#1a73e8', 5, 61)]
-    if (live.current.active) {
+    // A wide almost invisible line on top: clicking it adds a via point (only for the planner's route).
+    if (route.editable) {
+      const hit = new gm.Polyline({
+        map: map.current, path, clickable: true, strokeColor: '#000000', strokeWeight: 22, strokeOpacity: 0.01, zIndex: 62,
+      })
+      hit.addListener('click', (e) => live.current.onRouteClick?.({ lat: e.latLng.lat(), lng: e.latLng.lng() }))
+      routeLines.current.push(hit)
+    }
+    if (!route.keepView && live.current.active) {
       const b = new gm.LatLngBounds()
       path.forEach((p) => b.extend(p))
       map.current.fitBounds(b, 60)

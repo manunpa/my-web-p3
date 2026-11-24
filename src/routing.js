@@ -82,7 +82,7 @@ export async function driveRouteVia(points) {
   const r = j.routes?.[0]
   if (!r) throw new Error('ไม่พบเส้นทางถนน')
   const bad = (j.waypoints ?? []).findIndex((w) => (w?.distance ?? 0) > SNAP_MAX_M)
-  if (bad >= 0) throw new Error(`จุดที่ ${bad + 1} อยู่ไกลจากถนนเกินไป`)
+  if (bad >= 0) throw Object.assign(new Error(`จุดที่ ${bad + 1} อยู่ไกลจากถนนเกินไป`), { waypoint: bad }) // waypoint: its index in `points`
   return {
     km: r.distance / 1000, min: r.duration / 60,
     coords: r.geometry.coordinates.map(([lng, lat]) => [lat, lng]),

@@ -68,6 +68,73 @@ export function bestOrder(dur) {
   return bestPath
 }
 
+/* ---- via points: dragging the route to make it go where a truck can really drive ---- */
+
+export const MAX_VIAS = 10
+
+/**
+ * The stops with the via points in between, in driving order.
+ * vias: [{ lat, lng, leg }] where leg = the index of the stop the via point comes after, listed in
+ * driving order inside each leg. -> { pts: [{ lat, lng }], isVia: [boolean] }
+ */
+export function waypointsOf(stops, vias) {
+  const pts = [], isVia = []
+  stops.forEach((s, i) => {
+    pts.push({ lat: s.lat, lng: s.lng }); isVia.push(false)
+    for (const v of vias) if (v.leg === i && i < stops.length - 1) { pts.push({ lat: v.lat, lng: v.lng }); isVia.push(true) }
+  })
+  return { pts, isVia }
+}
+
+/** The route legs (one per pair of neighbouring waypoints) summed up per leg between two real stops. */
+export function mainLegs(legs, isVia) {
+  const out = []
+  let cur = null
+  legs.forEach((l, i) => {
+    cur = cur ? { km: cur.km + l.km, min: cur.min + l.min } : { km: l.km, min: l.min }
+    if (!isVia[i + 1]) { out.push(cur); cur = null } // the waypoint this leg ends at is a real stop
+  })
+  return out
+}
+
+/**
+ * Where on the route a point is: { sub, atKm } with sub = the index of the leg (between two
+ * neighbouring waypoints) it falls in. coords: the route line, legsKm: length of each leg.
+ */
+export function locateOnRoute(coords, totalKm, legsKm, lat, lng) {
+  const { items, total } = alongRoute(coords, [{ lat, lng }], 1e6)
+  if (!items.length || !total) return { sub: 0, atKm: 0 }
+  const atKm = items[0].atKm * (totalKm / total)
+  let acc = 0, sub = legsKm.length - 1
+  for (let k = 0; k < legsKm.length; k++) {
+    acc += legsKm[k]
+    if (atKm <= acc) { sub = k; break }
+  }
+  return { sub, atKm }
+}
+
+/** Leg `sub` of the route cut in two at atKm (km from the start), so the legs still match the waypoints after a via point was added. */
+export function splitLeg(legs, sub, atKm) {
+  const before = legs.slice(0, sub).reduce((s, l) => s + l.km, 0)
+  const l = legs[sub]
+  const first = Math.min(Math.max(atKm - before, 0), l.km)
+  const r = l.km ? first / l.km : 0.5
+  return [...legs.slice(0, sub), { km: first, min: l.min * r }, { km: l.km - first, min: l.min * (1 - r) }, ...legs.slice(sub + 1)]
+}
+
+/** A new via point put into the list of via points after waypoint `sub` of the current route. */
+export function insertVia(stops, vias, sub, pt) {
+  const { isVia } = waypointsOf(stops, vias)
+  const upto = isVia.slice(0, sub + 1)
+  const leg = upto.filter((v) => !v).length - 1 // the stop this via point comes after
+  const lastStop = upto.lastIndexOf(false)
+  const pos = upto.slice(lastStop + 1).length // how many via points of this leg come before it
+  const before = vias.filter((v) => v.leg < leg).length
+  const next = vias.slice()
+  next.splice(before + pos, 0, { lat: pt.lat, lng: pt.lng, leg })
+  return next
+}
+
 const ll = (s) => `${s.lat.toFixed(6)},${s.lng.toFixed(6)}`
 
 /** A Google Maps directions link through the stops, in order (free, opens in the Maps app or site). */

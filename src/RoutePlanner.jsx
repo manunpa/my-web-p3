@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Route, X, ExternalLink, LocateFixed, Fuel } from 'lucide-react'
 import { formatMin, OSRM_CREDIT } from './routing'
 import { formatDist, fuelInk } from './mapsData'
@@ -13,7 +13,7 @@ const SHOW = 25
  */
 export default function RoutePlanner({
   stops, open, onToggle, busy, hasMe, onAddMe, onAddCoord, onRemove, onClear, onOptimize, onBuild, onFuel,
-  route, along, radiusKm, googleLink, onPick, colorOf, fuelLoading, focus, onFocus,
+  route, along, radiusKm, googleLink, onPick, colorOf, fuelLoading, focus, onFocus, vias, onRemoveVia, onClearVias,
 }) {
   const [limit, setLimit] = useState(SHOW)
   const [coord, setCoord] = useState('')
@@ -33,12 +33,22 @@ export default function RoutePlanner({
         )}
         <ol className="stops">
           {stops.map((s, i) => (
-            <li key={`${s.id}-${i}`}>
-              <span className="stop-n">{i + 1}</span>
-              <span className="stop-name" title={s.name}>{s.name}</span>
-              {route?.legs?.[i - 1] && <em className="stop-leg">{route.legs[i - 1].km.toFixed(1)} กม. · {formatMin(route.legs[i - 1].min)}</em>}
-              <button type="button" className="x" onClick={() => onRemove(i)} aria-label={`เอา ${s.name} ออกจากแผน`}><X size={14} /></button>
-            </li>
+            <Fragment key={`${s.id}-${i}`}>
+              <li>
+                <span className="stop-n">{i + 1}</span>
+                <span className="stop-name" title={s.name}>{s.name}</span>
+                {route?.legs?.[i - 1] && <em className="stop-leg">{route.legs[i - 1].km.toFixed(1)} กม. · {formatMin(route.legs[i - 1].min)}</em>}
+                <button type="button" className="x" onClick={() => onRemove(i)} aria-label={`เอา ${s.name} ออกจากแผน`}><X size={14} /></button>
+              </li>
+              {/* the via points dragged onto the route, between this stop and the next */}
+              {vias.map((v, k) => v.leg === i && (
+                <li key={`via-${k}`} className="via-row">
+                  <span className="via-dot" aria-hidden="true" />
+                  <span className="stop-name">จุดผ่าน · {v.lat.toFixed(4)}, {v.lng.toFixed(4)}</span>
+                  <button type="button" className="x" onClick={() => onRemoveVia(k)} aria-label="เอาจุดผ่านนี้ออก"><X size={14} /></button>
+                </li>
+              ))}
+            </Fragment>
           ))}
         </ol>
 
@@ -66,6 +76,14 @@ export default function RoutePlanner({
           )}
           {stops.length > 0 && <button type="button" className="more" onClick={onClear}>ล้างแผน</button>}
         </div>
+
+        {route && (
+          <p className="planner-hint muted">
+            <b>ปรับเส้นทางให้ตรงกับที่รถวิ่งได้จริง:</b> คลิกที่เส้นสีน้ำเงินบนแผนที่ จะมีจุดขาวขึ้น แล้วลากจุดนั้นไปวางบนถนนที่ต้องการ
+            เส้นทางจะอ้อมไปผ่านจุดนั้น (ลากต่อได้หลายจุด)
+            {vias.length > 0 && <> · <button type="button" className="link-btn" onClick={onClearVias}>ล้างจุดผ่านทั้งหมด ({vias.length})</button></>}
+          </p>
+        )}
 
         {route && (
           <p className="planner-sum">

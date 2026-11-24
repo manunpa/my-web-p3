@@ -6,7 +6,9 @@ import {
 import { loadOffshore, cachedOffshore, DMF_CREDIT, PLATFORM_GROUP, PLATFORM_COLOR } from './offshoreData'
 import { loadRainFrames, rainTimeLabel, lagLabel } from './rainRadar'
 import { driveTable, driveRoute, driveMatrix, driveRouteVia, formatMin, OSRM_CREDIT } from './routing'
-import { alongRoute, bestOrder, googleDirections, MAX_STOPS } from './planner'
+import {
+  alongRoute, bestOrder, googleDirections, MAX_STOPS, MAX_VIAS, waypointsOf, mainLegs, locateOnRoute, insertVia, splitLeg,
+} from './planner'
 import RoutePlanner from './RoutePlanner'
 import StreetViewPanel from './StreetViewPanel'
 import {
@@ -368,7 +370,7 @@ export default function MapsPage() {
     [showSt, st.points, hiddenBrands, matches])
   const shownPlat = useMemo(() => (showOff && showPlat ? off.platforms.filter(matches) : []), [showOff, showPlat, off.platforms, matches])
   // Route planner: stops (the first is the start), the planned route and the fuel stations near it.
-  const [plan, setPlan] = useState({ stops: [], route: null, along: null })
+  const [plan, setPlan] = useState({ stops: [], vias: [], route: null, along: null })
   const [planOpen, setPlanOpen] = useState(false)
   const [planBusy, setPlanBusy] = useState(false)
   const [alongLoading, setAlongLoading] = useState(false)
@@ -522,7 +524,12 @@ export default function MapsPage() {
   /* ---- route planner ---- */
   const stopOf = (p) => ({ id: p.id, name: p.name, lat: p.lat, lng: p.lng })
   // Changing the stops makes the planned route and the fuel list out of date, so they are dropped.
-  const setStops = (fn) => setPlan((pl) => ({ stops: fn(pl.stops), route: null, along: null }))
+  // The via points stay only when a stop was added at the end; any other change of the stops drops them.
+  const setStops = (fn) => setPlan((pl) => {
+    const next = fn(pl.stops)
+    const appended = next.length >= pl.stops.length && pl.stops.every((s, i) => next[i] === s)
+    return { stops: next, vias: appended ? pl.vias : [], route: null, along: null }
+  })
   const addStop = (s) => {
     if (plan.stops.length >= MAX_STOPS) { say(`เพิ่มได้สูงสุด ${MAX_STOPS} จุด`, 3500); return }
     if (plan.stops.some((x) => x.id === s.id)) { say('จุดนี้อยู่ในแผนแล้ว', 2500); return }
@@ -544,8 +551,11 @@ export default function MapsPage() {
     setStops((st0) => [{ id: 'me', name: 'ตำแหน่งของฉัน', lat: me.lat, lng: me.lng }, ...st0].slice(0, MAX_STOPS))
     setPlanOpen(true)
   }
-  const removeStop = (i) => setStops((st0) => st0.filter((_, k) => k !== i))
-  const clearPlan = () => setPlan({ stops: [], route: null, along: null })
+  const removeStop = (i) => {
+    if (plan.vias.length) say('เอาจุดแวะออก จึงล้างจุดผ่านที่ลากไว้ด้วย ลากปรับเส้นทางใหม่ได้', 4500)
+    setStops((st0) => st0.filter((_, k) => k !== i))
+  }
+  const clearPlan = () => setPlan({ stops: [], vias: [], route: null, along: null })
 
   // Put the stops after the first one in the order with the least driving time (one OSRM call).
   const optimizePlan = async () => {
@@ -557,7 +567,7 @@ export default function MapsPage() {
       if (!order) { say('ไม่พบลำดับที่ขับถึงครบทุกจุดได้ (บางจุดไม่มีถนนเชื่อมถึงกัน)', 6000); return }
       setStops((st0) => order.map((i) => st0[i]))
       const total = order.slice(1).reduce((s, j, k) => s + dur[order[k]][j], 0)
-      say(`เรียงลำดับใหม่แล้ว: ขับรวมประมาณ ${formatMin(total)}`, 5000)
+      say(`เรียงลำดับใหม่แล้ว: ขับรวมประมาณ ${formatMin(total)}${plan.vias.length ? ' (ล้างจุดผ่านที่ลากไว้แล้ว)' : ''}`, 5000)
     } catch (e) {
       say(`เรียงลำดับไม่สำเร็จ: ${e.message}`, 6000)
     } finally {
@@ -565,29 +575,64 @@ export default function MapsPage() {
     }
   }
 
-  const buildPlan = async () => {
-    if (plan.stops.length < 2 || planBusy) return
+  // The fuel stations within radiusKm of a route (loads the station list the first time).
+  const alongFor = async (route, radiusKm) => {
+    const all = st.status === 'ready' ? st : { status: 'ready', ...(cachedStations() ?? await loadStations()) }
+    if (st.status !== 'ready') setSt(all)
+    const { items, total } = alongRoute(route.coords, all.points.filter((p) => !hiddenBrands.has(p.supplier)), radiusKm)
+    return { items, radiusKm, scale: total ? route.km / total : 1 }
+  }
+
+  // One route through the stops and the via points (one OSRM call). `vias` replace the current ones
+  // only when the route could be made, so a drop on a place with no road leaves everything as it was.
+  // keepView: do not zoom the map to the new route (it was only nudged).
+  const routePlan = async (stops, vias, keepView = false) => {
+    if (stops.length < 2 || planBusy) return
     setPlanBusy(true)
+    const { pts, isVia } = waypointsOf(stops, vias)
     try {
-      const rt = await driveRouteVia(plan.stops)
-      setPlan((pl) => ({ ...pl, route: rt, along: null }))
+      const rt = await driveRouteVia(pts)
+      const route = { ...rt, subLegs: rt.legs, legs: mainLegs(rt.legs, isVia), editable: true, keepView }
+      const along = plan.along ? await alongFor(route, plan.along.radiusKm) : null // keep the fuel list up to date
+      setPlan((pl) => ({ ...pl, vias, route, along }))
       setDrive((d) => (d ? { ...d, route: null } : d)) // one route on the map at a time
     } catch (e) {
-      say(`คำนวณเส้นทางไม่สำเร็จ: ${e.message}`, 7000)
+      const w = e.waypoint
+      const why = w == null ? e.message
+        : isVia[w] ? 'จุดผ่านที่ลากไปอยู่ไกลจากถนนเกินไป วางบนถนนหรือใกล้ถนนมากกว่านี้'
+          : `จุดแวะที่ ${isVia.slice(0, w + 1).filter((v) => !v).length} อยู่ไกลจากถนนเกินไป`
+      say(`คำนวณเส้นทางไม่สำเร็จ: ${why}`, 7000)
+      setPlan((pl) => ({ ...pl, vias: [...pl.vias] })) // a dragged point goes back to where it was
     } finally {
       setPlanBusy(false)
     }
   }
+  const buildPlan = () => routePlan(plan.stops, plan.vias)
 
-  // Fuel stations within radiusKm of the planned route (loads the station list the first time).
+  // Click on the route line: a via point appears there (drag it to make the route go another way).
+  const routeClick = (pt) => {
+    if (!plan.route || planBusy) return
+    if (plan.vias.length >= MAX_VIAS) { say(`เพิ่มจุดผ่านได้สูงสุด ${MAX_VIAS} จุด`, 3500); return }
+    const subLegs = plan.route.subLegs
+    const { sub, atKm } = locateOnRoute(plan.route.coords, plan.route.km, subLegs.map((l) => l.km), pt.lat, pt.lng)
+    const vias = insertVia(plan.stops, plan.vias, sub, pt)
+    setPlan((pl) => ({ ...pl, vias, route: { ...pl.route, subLegs: splitLeg(subLegs, sub, atKm), keepView: true } }))
+  }
+  // A via point was dragged somewhere else: the route is made again through the new place.
+  const viaDrag = (i, pt) => routePlan(plan.stops, plan.vias.map((v, k) => (k === i ? { ...v, lat: pt.lat, lng: pt.lng } : v)), true)
+  const removeVia = (i) => {
+    const vias = plan.vias.filter((_, k) => k !== i)
+    if (plan.route) routePlan(plan.stops, vias, true); else setPlan((pl) => ({ ...pl, vias }))
+  }
+  const clearVias = () => (plan.route ? routePlan(plan.stops, [], true) : setPlan((pl) => ({ ...pl, vias: [] })))
+
+  // Fuel stations within radiusKm of the planned route.
   const planFuel = async (radiusKm = plan.along?.radiusKm ?? (plan.route?.km > 200 ? 2 : 5)) => {
     if (!plan.route) return
     setAlongLoading(true)
     try {
-      const all = st.status === 'ready' ? st : { status: 'ready', ...(cachedStations() ?? await loadStations()) }
-      if (st.status !== 'ready') setSt(all)
-      const { items, total } = alongRoute(plan.route.coords, all.points.filter((p) => !hiddenBrands.has(p.supplier)), radiusKm)
-      setPlan((pl) => ({ ...pl, along: { items, radiusKm, scale: total ? plan.route.km / total : 1 } }))
+      const along = await alongFor(plan.route, radiusKm)
+      setPlan((pl) => ({ ...pl, along }))
     } catch (e) {
       say(`หาปั๊มตามเส้นทางไม่สำเร็จ: ${e.message}`, 6000)
     } finally {
@@ -604,7 +649,11 @@ export default function MapsPage() {
     points: shown, colorOf, selected, onSelect: setSelected, type, view: view.current, onView, fitKey, pin,
     me, nearest, following, locked: following && locked, onUnlock: () => setLocked(false), focus, rain, areas,
     route: shownRoute, stops: plan.stops, picked: pickedWithHtml, onPick, areaText,
+    vias: plan.route ? plan.vias : EMPTY, onRouteClick: routeClick, onViaDrag: viaDrag,
   }
+  // The Google Maps link goes through the via points too (it takes about 10 in all; beyond that only the stops).
+  const planPts = waypointsOf(plan.stops, plan.vias).pts
+  const googleLink = googleDirections(planPts.length <= 11 ? planPts : plan.stops)
 
   return (
     <div className="stage maps-stage">
@@ -733,7 +782,8 @@ export default function MapsPage() {
             stops={plan.stops} open={planOpen} onToggle={setPlanOpen} busy={planBusy} hasMe={!!me} onAddMe={addMeStop} onAddCoord={addCoordStop}
             focus={planFocus} onFocus={setPlanFocus}
             onRemove={removeStop} onClear={clearPlan} onOptimize={optimizePlan} onBuild={buildPlan} onFuel={planFuel}
-            route={plan.route} along={plan.along} radiusKm={plan.along?.radiusKm ?? (plan.route?.km > 200 ? 2 : 5)} googleLink={googleDirections(plan.stops)}
+            route={plan.route} along={plan.along} radiusKm={plan.along?.radiusKm ?? (plan.route?.km > 200 ? 2 : 5)} googleLink={googleLink}
+            vias={plan.vias} onRemoveVia={removeVia} onClearVias={clearVias}
             onPick={pickAlong} colorOf={colorOf} fuelLoading={alongLoading}
           />
 

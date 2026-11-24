@@ -72,7 +72,7 @@ const platClusterIcon = makeClusterIcon('gcluster gcluster-plat')
 // focus: { key, pts } -> zoom to show all pts.
 export default function LeafletMap({
   points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
-  me, nearest, following, locked, onUnlock, focus, rain, areas, route, stops, picked, onPick, areaText,
+  me, nearest, following, locked, onUnlock, focus, rain, areas, route, stops, picked, onPick, areaText, vias, onRouteClick, onViaDrag,
 }) {
   const box = useRef(null)
   const map = useRef(null)
@@ -90,7 +90,7 @@ export default function LeafletMap({
   const quiet = useRef(false) // true while following moves the map: do not report every frame
   const cursor = useRef(null)
   const cb = useRef({})
-  cb.current = { onSelect, onView, active, locked, onUnlock, onPick, areaText }
+  cb.current = { onSelect, onView, active, locked, onUnlock, onPick, areaText, onRouteClick, onViaDrag }
 
   // Distance labels sit on their line, measured in screen pixels from the start.
   const placeLabels = (from) => {
@@ -230,12 +230,30 @@ export default function LeafletMap({
     routeLayer.current?.remove()
     routeLayer.current = null
     if (!route?.coords?.length) return
-    routeLayer.current = L.layerGroup([
+    const layers = [
       L.polyline(route.coords, { color: '#fff', weight: 9, opacity: 0.85, lineCap: 'round', lineJoin: 'round', interactive: false }),
       L.polyline(route.coords, { color: '#1a73e8', weight: 5, opacity: 0.95, lineCap: 'round', lineJoin: 'round', interactive: false }),
-    ]).addTo(map.current)
-    if (cb.current.active) map.current.fitBounds(L.latLngBounds(route.coords), { padding: [60, 60], maxZoom: 16 })
+    ]
+    // A wide invisible line on top: clicking it adds a via point (only for the planner's route).
+    if (route.editable) {
+      layers.push(L.polyline(route.coords, { color: '#000', weight: 22, opacity: 0, interactive: true, bubblingMouseEvents: false, className: 'route-hit' })
+        .on('click', (e) => cb.current.onRouteClick?.({ lat: e.latlng.lat, lng: e.latlng.lng })))
+    }
+    routeLayer.current = L.layerGroup(layers).addTo(map.current)
+    if (!route.keepView && cb.current.active) map.current.fitBounds(L.latLngBounds(route.coords), { padding: [60, 60], maxZoom: 16 })
   }, [route])
+
+  // via points of the planner's route: drag one to make the route go another way
+  const viaLayer = useRef(null)
+  useEffect(() => {
+    viaLayer.current?.remove()
+    viaLayer.current = null
+    if (!vias?.length) return
+    viaLayer.current = L.layerGroup(vias.map((v, i) => L.marker([v.lat, v.lng], {
+      draggable: true, zIndexOffset: 6000, title: 'จุดผ่าน: ลากเพื่อปรับเส้นทาง',
+      icon: L.divIcon({ className: 'via-marker', html: '<span></span>', iconSize: [18, 18], iconAnchor: [9, 9] }),
+    }).on('dragend', (e) => { const p = e.target.getLatLng(); cb.current.onViaDrag?.(i, { lat: p.lat, lng: p.lng }) }))).addTo(map.current)
+  }, [vias])
 
   // concession areas (offshore layer): outlines with a light fill, click for details
   const areaLayer = useRef(null)

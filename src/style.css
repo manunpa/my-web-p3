@@ -491,6 +491,9 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .dups-title{margin:8px 0 2px;font-size:11px}
 .dup-row{display:flex;flex-direction:column;gap:1px;width:100%;padding:4px 0;border:0;background:none;color:var(--text);font:inherit;text-align:left;cursor:pointer}
 .dup-row:hover .pname{color:var(--gold-text)}
+.route-hit{cursor:copy}
+.via-marker span{display:block;width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid #1a73e8;box-sizing:border-box;box-shadow:0 2px 6px rgba(0,0,0,.45);cursor:grab}
+.via-marker:active span{cursor:grabbing}
 .stop-marker span{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#1a73e8;border:2px solid #fff;box-sizing:border-box;color:#fff;font:700 12px/1 system-ui,sans-serif;box-shadow:0 2px 6px rgba(0,0,0,.45)}
 /* route planner (folded in the side panel) */
 .planner{border:1px solid var(--line);border-radius:12px;background:var(--field)}
@@ -512,6 +515,9 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .planner-add .more:disabled{opacity:.5;cursor:not-allowed}
 .planner-focus{display:flex;align-items:flex-start;gap:7px;font-size:12px;line-height:1.4;cursor:pointer}
 .planner-focus input{margin-top:2px}
+.via-row{padding-left:6px;color:var(--muted)}
+.via-row .via-dot{flex:none;width:12px;height:12px;margin:0 4px;border-radius:50%;background:#fff;border:3px solid #1a73e8;box-sizing:border-box}
+.link-btn{padding:0;border:0;background:none;color:var(--gold-text);font:inherit;text-decoration:underline;cursor:pointer}
 .planner-actions{display:flex;flex-wrap:wrap;gap:6px}
 .planner-actions .more{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;font-size:12px;text-decoration:none;color:var(--text)}
 .planner-actions .more.primary{background:#1a73e8;border-color:#1a73e8;color:#fff}
