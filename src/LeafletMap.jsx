@@ -4,7 +4,7 @@ import 'leaflet.markercluster'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import { pointPopupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist, stationSvg } from './mapsData'
-import { createGlide } from './myLocation'
+import { createGlide, ACC_CIRCLE_MAX_M } from './myLocation'
 
 const TILES = {
   road: {
@@ -248,6 +248,9 @@ export default function LeafletMap({
       }).addTo(m).bindPopup('', { className: 'dark-popup' })
     }
     accC.current.setRadius(me.acc)
+    // A huge circle (no GPS, position guessed from the network) would cover the whole map: hide it.
+    const showAcc = me.acc <= ACC_CIRCLE_MAX_M
+    accC.current.setStyle({ opacity: showAcc ? 0.5 : 0, fillOpacity: showAcc ? 0.12 : 0 })
     meMk.current.setPopupContent(myPopupHtml(me, following, nearest[0]))
     const el = meMk.current.getElement()?.querySelector('.mypos')
     if (el) {

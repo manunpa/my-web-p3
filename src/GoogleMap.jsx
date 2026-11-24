@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import Supercluster from 'supercluster'
 import { GOOGLE_MAPS_KEY, pointPopupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist, stationSvg } from './mapsData'
 import { GOOGLE_MAPS_DAILY_LIMIT, takeGoogleMapLoad, consumeGoogleMapLoad } from './mapsQuota'
-import { createGlide } from './myLocation'
+import { createGlide, ACC_CIRCLE_MAX_M } from './myLocation'
 
 // Distance label drawn as a small SVG pill (Google marker labels cannot have a background).
 const distIcon = (gm, text, i) => {
@@ -344,6 +344,7 @@ export default function GoogleMap({
     }
     meMk.current.setIcon(myIcon(gm, me.heading))
     accC.current.setRadius(me.acc)
+    accC.current.setVisible(me.acc <= ACC_CIRCLE_MAX_M) // a huge circle (position guessed from the network) would cover the map
     glide.current.set(me, following)
   }, [ready, me, following])
 

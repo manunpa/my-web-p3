@@ -7,7 +7,7 @@ import {
   loadGeofences, cachedGeofences, googleMapsLink, navLink, parseCoords, OTHER_SUPPLIER_COLOR,
   distanceKm, nearestTo, formatDist, loadStations, cachedStations, fuelInk,
 } from './mapsData'
-import { useMyLocation } from './myLocation'
+import { useMyLocation, ACC_CIRCLE_MAX_M } from './myLocation'
 import { GOOGLE_MAPS_DAILY_LIMIT } from './mapsQuota'
 import LeafletMap from './LeafletMap'
 import GoogleMap, { preloadGoogleMaps } from './GoogleMap'
@@ -114,8 +114,11 @@ export default function MapsPage() {
       setQ(''); setPin(null); setSelected(null)
       const near = nearestTo(f, shownRef.current, 5)
       setFocus({ key: Date.now(), pts: [f, ...near.map((n) => n.p)] })
+      const rough = f.acc > ACC_CIRCLE_MAX_M
       say((near[0] ? `ใกล้ที่สุด: ${near[0].p.name} (${formatDist(near[0].km)})` : 'พบตำแหน่งแล้ว')
-        + ` · แม่นยำ ±${Math.round(f.acc)} ม. — กดปุ่มอีกครั้งเพื่อติดตามแบบเรียลไทม์`, 6000)
+        + (rough
+          ? ` · ตำแหน่งโดยประมาณ ±${formatDist(f.acc / 1000)} (ไม่มี GPS — บนมือถือจะแม่นกว่า)`
+          : ` · แม่นยำ ±${Math.round(f.acc)} ม. — กดปุ่มอีกครั้งเพื่อติดตามแบบเรียลไทม์`), rough ? 9000 : 6000)
     },
   })
   const me = loc.me

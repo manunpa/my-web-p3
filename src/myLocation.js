@@ -23,7 +23,10 @@ export function createGlide(onFrame, dur = 900) {
   }
 }
 
-export const geoErrorText = (err) => (err.code === 1
+// Above this accuracy (meters) the position is only a rough guess (no GPS): do not draw the circle.
+export const ACC_CIRCLE_MAX_M = 1000
+
+export const geoErrorText =(err) => (err.code === 1
   ? 'ไม่ได้รับอนุญาตให้ใช้ตำแหน่ง — เปิดสิทธิ์ "ตำแหน่ง" ให้เว็บนี้ในการตั้งค่าเบราว์เซอร์ แล้วลองใหม่'
   : err.code === 3 ? 'หาตำแหน่งนานเกินไป ลองใหม่อีกครั้ง หรือออกไปที่โล่ง'
     : 'หาตำแหน่งไม่สำเร็จ ตรวจสอบว่าเปิด GPS / Location ในมือถือแล้ว')
