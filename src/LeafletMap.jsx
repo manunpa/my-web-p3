@@ -3,7 +3,10 @@ import L from './leafletGlobal'
 import 'leaflet.markercluster'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
-import { pointPopupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist, stationSvg } from './mapsData'
+import {
+  pointPopupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist, stationSvg, platformSvg, areaPopupHtml,
+} from './mapsData'
+import { areaColor } from './offshoreData'
 import { createGlide, ACC_CIRCLE_MAX_M } from './myLocation'
 import { RAIN_MAX_ZOOM, RAIN_SHOW_MAX_ZOOM, RAIN_OPACITY } from './rainRadar'
 
@@ -40,15 +43,27 @@ const stationIcon = (color) => {
   return stationIcons.get(color)
 }
 
-const clusterIcon = (cluster) => {
+// offshore platform marker: a diamond in the platform color
+const platformIcons = new Map()
+const platformIcon = (color) => {
+  if (!platformIcons.has(color)) {
+    platformIcons.set(color, L.divIcon({ className: 'st-marker', html: platformSvg(color), iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -11] }))
+  }
+  return platformIcons.get(color)
+}
+
+// Gold clusters for customer and fuel stations, blue ones (gcluster-plat) for offshore platforms.
+const makeClusterIcon = (cls) => (cluster) => {
   const n = cluster.getChildCount()
   const size = n < 10 ? 34 : n < 100 ? 40 : n < 1000 ? 48 : 56
   return L.divIcon({
     html: `<span>${n >= 1000 ? (n / 1000).toFixed(1) + 'k' : n}</span>`,
-    className: 'gcluster',
+    className: cls,
     iconSize: [size, size],
   })
 }
+const clusterIcon = makeClusterIcon('gcluster')
+const platClusterIcon = makeClusterIcon('gcluster gcluster-plat')
 
 // points: visible points. colorOf(supplier). selected: point or null. onSelect(point).
 // view: { lat, lng, zoom } to start from. onView(view, bounds) on every move.
@@ -57,12 +72,13 @@ const clusterIcon = (cluster) => {
 // focus: { key, pts } -> zoom to show all pts.
 export default function LeafletMap({
   points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
-  me, nearest, following, locked, onUnlock, focus, rain,
+  me, nearest, following, locked, onUnlock, focus, rain, areas,
 }) {
   const box = useRef(null)
   const map = useRef(null)
   const tiles = useRef(null)
   const cluster = useRef(null)
+  const platCluster = useRef(null)
   const markers = useRef(new WeakMap()) // point object -> marker
   const highlight = useRef(null)
   const pinMk = useRef(null)
@@ -99,6 +115,10 @@ export default function LeafletMap({
     cluster.current = L.markerClusterGroup({
       chunkedLoading: true, showCoverageOnHover: false, maxClusterRadius: 55,
       spiderfyOnMaxZoom: true, iconCreateFunction: clusterIcon,
+    }).addTo(m)
+    platCluster.current = L.markerClusterGroup({
+      chunkedLoading: true, showCoverageOnHover: false, maxClusterRadius: 55,
+      spiderfyOnMaxZoom: true, iconCreateFunction: platClusterIcon,
     }).addTo(m)
     lines.current = L.layerGroup().addTo(m)
     const report = () => {
@@ -161,23 +181,41 @@ export default function LeafletMap({
     }).addTo(map.current)
   }, [rainUrl])
 
+  // concession areas (offshore layer): outlines with a light fill, click for details
+  const areaLayer = useRef(null)
+  useEffect(() => {
+    areaLayer.current?.remove()
+    areaLayer.current = null
+    if (!areas) return
+    areaLayer.current = L.geoJSON(areas, {
+      style: (f) => ({ color: areaColor(f.properties), weight: 1.4, dashArray: '6 4', fillColor: areaColor(f.properties), fillOpacity: 0.1 }),
+      onEachFeature: (f, layer) => layer.bindPopup(areaPopupHtml(f.properties), { className: 'dark-popup', maxWidth: 300 }),
+    }).addTo(map.current)
+  }, [areas])
+
   // markers (created once per point, re-used when filters change)
   useEffect(() => {
-    const layers = points.map((p) => {
+    const plats = []
+    const layers = []
+    for (const p of points) {
       let mk = markers.current.get(p)
       if (!mk) {
         mk = p.kind === 'station'
           ? L.marker([p.lat, p.lng], { icon: stationIcon(colorOf(p.supplier)), title: p.name })
-          : L.circleMarker([p.lat, p.lng], {
+          : p.kind === 'platform'
+            ? L.marker([p.lat, p.lng], { icon: platformIcon(colorOf(p.supplier)), title: p.name })
+            : L.circleMarker([p.lat, p.lng], {
             radius: 6, weight: 1.5, color: '#fff', fillColor: colorOf(p.supplier), fillOpacity: 1,
           })
         mk.on('click', () => cb.current.onSelect(p))
         markers.current.set(p, mk)
       }
-      return mk
-    })
+      ;(p.kind === 'platform' ? plats : layers).push(mk)
+    }
     cluster.current.clearLayers()
     cluster.current.addLayers(layers)
+    platCluster.current.clearLayers()
+    platCluster.current.addLayers(plats)
   }, [points, colorOf])
 
   // when this map becomes the visible one, jump to the shared view

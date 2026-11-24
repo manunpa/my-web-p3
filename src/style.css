@@ -401,6 +401,8 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .gcluster{display:grid;place-items:center;border-radius:50%;background:rgb(var(--glow) / .28);transition:transform .2s}
 .gcluster span{display:grid;place-items:center;width:72%;height:72%;border-radius:50%;background:var(--gold);color:var(--ink);font-weight:700;font-size:12px;box-shadow:0 0 0 1.5px var(--ink),0 0 16px rgb(var(--glow) / .55)}
 .gcluster:hover{transform:scale(1.1)}
+.gcluster-plat{background:rgb(14 116 144 / .28)}
+.gcluster-plat span{background:#0e7490;color:#fff;box-shadow:0 0 0 1.5px #0b3a47,0 0 16px rgb(14 116 144 / .55)}
 .dark-popup .leaflet-popup-content-wrapper,.dark-popup .leaflet-popup-tip{background:rgb(var(--surface-2) / .96);color:var(--text);border:1px solid rgb(var(--glow) / .4);box-shadow:0 10px 30px rgba(0,0,0,.6)}
 .dark-popup .leaflet-popup-content{margin:12px 14px}
 .dark-popup a.leaflet-popup-close-button{color:var(--muted)}
@@ -444,6 +446,11 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .sup.st-toggle.on{border-color:#00a3e0;color:#00a3e0;background:#00a3e014}
 .sup.st-toggle em{font-weight:400}
 .st-marker{filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}
+.sup.off-toggle.on{border-color:#0e7490;color:#0e7490;background:#0e749014}
+.plat-dot{width:10px;height:10px;transform:rotate(45deg);border-radius:2px;box-shadow:0 0 0 1.5px #fff}
+.area-dot{width:12px;height:10px;border:1.5px dashed;border-radius:2px;background:#0e749022}
+.mpop-src{margin-top:2px;color:var(--muted);font-size:10.5px}
+.gm-style .mpop-src{color:#6b6a66}
 .mpop-brand{padding:1px 7px;border-radius:6px;font-weight:700}
 .mpop-sec{margin-top:2px;font-size:11px;font-weight:600;color:var(--muted)}
 .mpop-chips{display:flex;flex-wrap:wrap;gap:3px;max-height:84px;overflow:auto}

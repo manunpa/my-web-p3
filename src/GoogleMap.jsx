@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import Supercluster from 'supercluster'
-import { GOOGLE_MAPS_KEY, pointPopupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist, stationSvg } from './mapsData'
+import {
+  GOOGLE_MAPS_KEY, pointPopupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist, stationSvg, platformSvg, areaPopupHtml,
+} from './mapsData'
+import { areaColor, PLATFORM_COLOR } from './offshoreData'
 import { GOOGLE_MAPS_DAILY_LIMIT, takeGoogleMapLoad, consumeGoogleMapLoad } from './mapsQuota'
 import { createGlide, ACC_CIRCLE_MAX_M } from './myLocation'
 import { radarTileElement } from './rainRadar'
@@ -74,10 +77,15 @@ const DARK = [
 
 const MAP_TYPES = { road: 'roadmap', dark: 'roadmap', satellite: 'satellite', hybrid: 'hybrid', terrain: 'terrain' }
 
-const clusterSvg = (size) => 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
+// Gold clusters for customer and fuel stations, blue ones for offshore platforms.
+const CLUSTER_STYLE = {
+  gold: { fill: '#facc15', stroke: '#1a1400', text: '#1a1400' },
+  plat: { fill: PLATFORM_COLOR, stroke: '#0b3a47', text: '#ffffff' },
+}
+const clusterSvg = (size, kind = 'gold') => 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 40 40">
-    <circle cx="20" cy="20" r="19" fill="#facc15" fill-opacity=".28"/>
-    <circle cx="20" cy="20" r="14" fill="#facc15" stroke="#1a1400" stroke-width="1.5"/></svg>`)
+    <circle cx="20" cy="20" r="19" fill="${CLUSTER_STYLE[kind].fill}" fill-opacity=".28"/>
+    <circle cx="20" cy="20" r="14" fill="${CLUSTER_STYLE[kind].fill}" stroke="${CLUSTER_STYLE[kind].stroke}" stroke-width="1.5"/></svg>`)
 
 const clusterSize = (n) => (n < 10 ? 34 : n < 100 ? 40 : n < 1000 ? 48 : 56)
 
@@ -88,11 +96,12 @@ const clusterSize = (n) => (n < 10 ? 34 : n < 100 ? 40 : n < 1000 ? 48 : 56)
  */
 export default function GoogleMap({
   points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
-  me, nearest, following, locked, onUnlock, focus, overlays, onFail, rain,
+  me, nearest, following, locked, onUnlock, focus, overlays, onFail, rain, areas,
 }) {
   const box = useRef(null)
   const map = useRef(null)
   const index = useRef(null)
+  const platIndex = useRef(null)
   const byId = useRef(new Map())
   const drawn = useRef(new Map()) // key -> marker currently on the map
   const highlight = useRef(null)
@@ -135,13 +144,15 @@ export default function GoogleMap({
     const ne = b.getNorthEast(), sw = b.getSouthWest()
     const west = sw.lng(), east = ne.lng()
     const bbox = west <= east ? [west, sw.lat(), east, ne.lat()] : [-180, sw.lat(), 180, ne.lat()]
-    const features = index.current.getClusters(bbox, Math.round(m.getZoom()))
+    const zoom = Math.round(m.getZoom())
+    // two indexes: customer / fuel stations ('g') and offshore platforms ('o')
+    const sources = [['g', 'gold', index.current], ['o', 'plat', platIndex.current]].filter((s) => s[2])
 
     const keep = new Set()
-    for (const f of features) {
+    for (const [tag, kind, idx] of sources) for (const f of idx.getClusters(bbox, zoom)) {
       const [lng, lat] = f.geometry.coordinates
       const c = f.properties
-      const key = c.cluster ? `c${c.cluster_id}:${c.point_count}` : `p${c.id}`
+      const key = c.cluster ? `${tag}c${c.cluster_id}:${c.point_count}` : `${tag}p${c.id}`
       keep.add(key)
       if (drawn.current.has(key)) continue
       let mk
@@ -149,21 +160,24 @@ export default function GoogleMap({
         const n = c.point_count, size = clusterSize(n)
         mk = new gm.Marker({
           position: { lat, lng }, map: m, zIndex: 1000 + n,
-          icon: { url: clusterSvg(size), scaledSize: new gm.Size(size, size), anchor: new gm.Point(size / 2, size / 2) },
-          label: { text: n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n), color: '#1a1400', fontWeight: '700', fontSize: '12px' },
+          icon: { url: clusterSvg(size, kind), scaledSize: new gm.Size(size, size), anchor: new gm.Point(size / 2, size / 2) },
+          label: { text: n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n), color: CLUSTER_STYLE[kind].text, fontWeight: '700', fontSize: '12px' },
         })
         const id = c.cluster_id
         mk.addListener('click', () => {
           m.panTo({ lat, lng })
-          m.setZoom(Math.min(index.current.getClusterExpansionZoom(id), 18))
+          m.setZoom(Math.min(idx.getClusterExpansionZoom(id), 18))
         })
       } else {
         const p = byId.current.get(c.id)
         const color = live.current.colorOf(p.supplier)
         mk = new gm.Marker({
           position: { lat, lng }, map: m, title: p.name,
-          icon: p.kind === 'station'
-            ? { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(stationSvg(color)), scaledSize: new gm.Size(22, 22), anchor: new gm.Point(11, 11) }
+          icon: p.kind === 'station' || p.kind === 'platform'
+            ? {
+              url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent((p.kind === 'station' ? stationSvg : platformSvg)(color)),
+              scaledSize: new gm.Size(22, 22), anchor: new gm.Point(11, 11),
+            }
             : { path: gm.SymbolPath.CIRCLE, scale: 6, fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 1.5 },
         })
         mk.addListener('click', () => live.current.onSelect(p))
@@ -268,13 +282,42 @@ export default function GoogleMap({
     })
   }, [ready, rainUrl])
 
+  // concession areas (offshore layer): a Data layer with outlines and a light fill, click for details
+  const areaData = useRef(null)
+  useEffect(() => {
+    if (!ready) return
+    const gm = window.google.maps
+    if (!areaData.current) {
+      const d = new gm.Data({ map: map.current })
+      d.setStyle((f) => {
+        const c = areaColor({ shore: f.getProperty('shore') })
+        return { strokeColor: c, strokeWeight: 1.4, strokeOpacity: 0.9, fillColor: c, fillOpacity: 0.1, clickable: true }
+      })
+      d.addListener('click', (e) => {
+        const props = {}
+        e.feature.forEachProperty((v, k) => { props[k] = v })
+        info.current.setContent(areaPopupHtml(props))
+        info.current.setPosition(e.latLng)
+        info.current.open({ map: map.current, shouldFocus: false })
+      })
+      areaData.current = d
+    }
+    const d = areaData.current
+    const old = []
+    d.forEach((f) => old.push(f))
+    old.forEach((f) => d.remove(f))
+    if (areas) d.addGeoJson(areas)
+  }, [ready, areas])
+
   // (re)build the cluster index when the visible set or colors change
   useEffect(() => {
     if (!ready) return
     byId.current = new Map(points.map((p) => [p.id, p]))
-    index.current = new Supercluster({ radius: 60, maxZoom: 16 }).load(points.map((p) => ({
+    const load = (list) => new Supercluster({ radius: 60, maxZoom: 16 }).load(list.map((p) => ({
       type: 'Feature', properties: { id: p.id }, geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
     })))
+    index.current = load(points.filter((p) => p.kind !== 'platform'))
+    platIndex.current = load(points.filter((p) => p.kind === 'platform'))
     clearDrawn()
     redraw()
   }, [ready, points, colorOf]) // eslint-disable-line react-hooks/exhaustive-deps

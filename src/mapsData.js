@@ -3,6 +3,7 @@
 /* ------------------------------------------------------------------ */
 
 import { fetchProtectedJson } from './protectedFetch'
+import { DMF_CREDIT, PLATFORM_GROUP, areaColor } from './offshoreData'
 
 // Google Sheet (Apps Script) returning [{ Geofence, Latitude, Longitude, Supplier, ... }]
 // Only answers signed-in users: the Firebase ID token is checked by the script
@@ -201,8 +202,47 @@ export function stationPopupHtml(p, color) {
   </div>`
 }
 
-// popup for any point on the map (geofence or fuel station)
-export const pointPopupHtml = (p, color) => (p.kind === 'station' ? stationPopupHtml(p, color) : popupHtml(p, color))
+/* ---------- offshore: production platforms and concession areas (DMF) ---------- */
+
+// Diamond marker for a production platform (different from the round station and customer markers).
+export const platformSvg = (color, size = 22) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24">`
+  + `<path d="M12 1.5 22.5 12 12 22.5 1.5 12z" fill="${color}" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>`
+  + '<circle cx="12" cy="12" r="3" fill="#fff"/></svg>'
+
+const dmfLine = () => `<span class="mpop-src">ที่มา: ${escapeHtml(DMF_CREDIT)}</span>`
+
+export function platformPopupHtml(p, color) {
+  const d = p.platform
+  const line = (label, v) => (v ? `<span><b>${label}</b> ${escapeHtml(v)}</span>` : '')
+  return `<div class="mpop">
+    <div class="mpop-sup"><span class="mpop-brand" style="background:${color};color:#fff">◆ ${escapeHtml(PLATFORM_GROUP)}</span>${d.type ? escapeHtml(d.type) : ''}</div>
+    <strong>${escapeHtml(p.name)}</strong>
+    <code>${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</code>
+    ${line('ผู้ดำเนินการ', d.operator)}${line('แหล่ง', d.field)}${line('แปลง', d.block)}${line('สัมปทาน', d.lease)}${line('ติดตั้ง', d.installed)}
+    ${dmfLine()}
+    ${popupActions(p, { onRoad: false })}
+  </div>`
+}
+
+const SHORE_TH = { Offshore: 'ในทะเล', Onshore: 'บนบก' }
+const STATUS_TH = { Production: 'กำลังผลิต', Exploration: 'สำรวจ', OCA: 'พื้นที่พัฒนาร่วม (OCA)', 'Exploration / OCA': 'สำรวจ / OCA' }
+
+// Popup for a concession block (props from offshoreData.js).
+export function areaPopupHtml(props) {
+  const line = (label, v) => (v ? `<span><b>${label}</b> ${escapeHtml(v)}</span>` : '')
+  const color = areaColor(props)
+  return `<div class="mpop">
+    <div class="mpop-sup"><span class="mpop-brand" style="background:${color};color:#fff">แปลงสัมปทาน</span>${escapeHtml(SHORE_TH[props.shore] ?? props.shore)}</div>
+    <strong>${escapeHtml(props.block || props.lease || 'แปลงสัมปทาน')}</strong>
+    ${line('สัมปทานเลขที่', props.lease)}${line('สถานะ', STATUS_TH[props.status] ?? props.status)}${line('ผู้ดำเนินการ', props.operator)}${line('เจ้าของ', props.owner)}
+    ${line('ออกให้เมื่อ', props.issued)}${props.areaKm ? line('พื้นที่', `${props.areaKm.toLocaleString('th-TH')} ตร.กม.`) : ''}
+    ${dmfLine()}
+  </div>`
+}
+
+// popup for any point on the map (customer station, fuel station or offshore platform)
+export const pointPopupHtml = (p, color) => (p.kind === 'station' ? stationPopupHtml(p, color)
+  : p.kind === 'platform' ? platformPopupHtml(p, color) : popupHtml(p, color))
 
 export const googleMapsLink = (p) => `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`
 
@@ -277,12 +317,13 @@ export const streetViewLink = (p) => `https://www.google.com/maps/@?api=1&map_ac
 export const navLink = (p) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`
 
 // Copy / navigate buttons for popups. MapsPage handles clicks on [data-copy].
-function popupActions(p) {
+function popupActions(p, { onRoad = true } = {}) {
   const c = `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`
+  // Street View and driving directions make no sense for a platform out at sea.
   return `<div class="mpop-actions">
-    <button type="button" class="mpop-btn" data-sv="${p.lat},${p.lng}">👁 Street View</button>
+    ${onRoad ? `<button type="button" class="mpop-btn" data-sv="${p.lat},${p.lng}">👁 Street View</button>` : ''}
     <button type="button" class="mpop-btn" data-copy="${c}">⧉ คัดลอกพิกัด</button>
-    <a class="mpop-btn primary" href="${navLink(p)}" target="_blank" rel="noopener">➤ นำทาง</a>
+    ${onRoad ? `<a class="mpop-btn primary" href="${navLink(p)}" target="_blank" rel="noopener">➤ นำทาง</a>` : ''}
   </div>`
 }
 

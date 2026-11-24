@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Search, RefreshCw, MapPin, Layers, Crosshair, X, Copy, Check, ExternalLink, AlertTriangle,
-  LocateFixed, Navigation, Fuel, Car, Bus, Bike, Eye, CloudRain, Play, Pause,
+  LocateFixed, Navigation, Fuel, Car, Bus, Bike, Eye, CloudRain, Play, Pause, Anchor,
 } from 'lucide-react'
+import { loadOffshore, cachedOffshore, DMF_CREDIT, PLATFORM_GROUP, PLATFORM_COLOR } from './offshoreData'
 import { loadRainFrames, rainTimeLabel } from './rainRadar'
 import StreetViewPanel from './StreetViewPanel'
 import {
@@ -209,6 +210,29 @@ export default function MapsPage() {
     if (showSt && (st.status === 'idle' || st.status === 'error')) loadSt()
   }, [showSt]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Offshore layer (DMF): production platforms (points) and concession blocks (areas).
+  // Off by default; loaded the first time it is turned on. Public service, no login needed.
+  const [showOff, setShowOff] = useState(() => store.get('maps.offshore', '0') === '1')
+  const [showPlat, setShowPlat] = useState(true)
+  const [showAreas, setShowAreas] = useState(true)
+  const [off, setOff] = useState(() => {
+    const c = cachedOffshore()
+    return c ? { status: 'ready', ...c } : { status: 'idle', platforms: [], areas: null }
+  })
+  const loadOff = useCallback(async () => {
+    setOff((s) => ({ ...s, status: 'loading' }))
+    try {
+      setOff({ status: 'ready', ...await loadOffshore() })
+    } catch (e) {
+      setOff((s) => ({ ...s, status: s.platforms.length ? 'ready' : 'error' }))
+      say(`โหลดข้อมูลแท่นผลิต/แปลงสัมปทานไม่สำเร็จ (${e.message})`, 6000)
+    }
+  }, [say])
+  useEffect(() => {
+    store.set('maps.offshore', showOff ? '1' : '0')
+    if (showOff && (off.status === 'idle' || off.status === 'error')) loadOff()
+  }, [showOff]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const load = useCallback(async () => {
     setBusy(true)
     try {
@@ -222,7 +246,7 @@ export default function MapsPage() {
     }
   }, [])
   useEffect(() => { load() }, [load])
-  const reload = () => { load(); if (showSt) loadSt() }
+  const reload = () => { load(); if (showSt) loadSt(); if (showOff) loadOff() }
 
   // Fetch the Google Maps script in the background so switching to it is quick.
   // (Loading the script is free; only creating a map counts as a map load.)
@@ -262,24 +286,32 @@ export default function MapsPage() {
     say(`${why} — สลับไปใช้ OpenStreetMap ให้อัตโนมัติ`, 8000)
   }, [say])
 
-  const colors = useMemo(() => new Map([...data.suppliers, ...st.brands].map((s) => [s.name, s.color])), [data.suppliers, st.brands])
+  const colors = useMemo(() => new Map([...data.suppliers, ...st.brands, { name: PLATFORM_GROUP, color: PLATFORM_COLOR }]
+    .map((s) => [s.name, s.color])), [data.suppliers, st.brands])
   const colorOf = useCallback((name) => colors.get(name) ?? OTHER_SUPPLIER_COLOR, [colors])
 
   const term = typedPin ? '' : q.trim().toLowerCase() // a coordinate search shows every station, nearest first
   const matches = useCallback((p) => !term || p.name.toLowerCase().includes(term) || p.supplier.toLowerCase().includes(term)
     || `${p.lat},${p.lng}`.includes(term)
-    || (p.station && `${p.station.where} ${p.station.address}`.toLowerCase().includes(term)), [term])
+    || (p.station && `${p.station.where} ${p.station.address}`.toLowerCase().includes(term))
+    || (p.platform && `${p.platform.operator} ${p.platform.operatorE} ${p.platform.field} ${p.platform.block} ${p.platform.lease}`.toLowerCase().includes(term)),
+  [term])
 
   // Points drawn on the map: supplier / brand toggles + search.
   const shownGeo = useMemo(() => data.points.filter((p) => !hidden.has(p.supplier) && matches(p)), [data.points, hidden, matches])
   const shownSt = useMemo(() => (showSt ? st.points.filter((p) => !hiddenBrands.has(p.supplier) && matches(p)) : []),
     [showSt, st.points, hiddenBrands, matches])
-  const shown = useMemo(() => (shownSt.length ? [...shownGeo, ...shownSt] : shownGeo), [shownGeo, shownSt])
+  const shownPlat = useMemo(() => (showOff && showPlat ? off.platforms.filter(matches) : []), [showOff, showPlat, off.platforms, matches])
+  const shown = useMemo(() => (shownSt.length || shownPlat.length ? [...shownGeo, ...shownSt, ...shownPlat] : shownGeo),
+    [shownGeo, shownSt, shownPlat])
+  // Concession areas are drawn whole (they are not searched or filtered).
+  const areas = showOff && showAreas ? off.areas : null
 
   // The 5 closest customer stations to my location (or the searched coordinate): dashed lines on
-  // the map. With every customer station hidden, the 5 closest fuel stations instead. With both
-  // layers showing, the closest fuel station is added to the "nearest" bar.
-  const nearPool = shownGeo.length ? shownGeo : shownSt
+  // the map. With every customer station hidden, the 5 closest fuel stations, and with those hidden
+  // too, the 5 closest offshore platforms. With both customer and fuel layers showing, the closest
+  // fuel station is added to the "nearest" bar.
+  const nearPool = shownGeo.length ? shownGeo : shownSt.length ? shownSt : shownPlat
   shownRef.current = nearPool
   const lineFrom = me ?? pin
   const nearest = useMemo(() => (lineFrom ? nearestTo(lineFrom, nearPool, 5) : []), [lineFrom, nearPool])
@@ -296,7 +328,7 @@ export default function MapsPage() {
     return origin ? [...inside].sort((a, b) => distKm(origin, a) - distKm(origin, b)) : inside
   }, [shown, inView, bounds, origin])
 
-  useEffect(() => setLimit(PAGE), [q, hidden, hiddenBrands, showSt, inView, pin, !me]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setLimit(PAGE), [q, hidden, hiddenBrands, showSt, showOff, showPlat, inView, pin, !me]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onView = useCallback((v, b) => { view.current = v; setBounds(b); setCenter({ lat: v.lat, lng: v.lng }) }, [])
 
@@ -324,7 +356,7 @@ export default function MapsPage() {
 
   const mapProps = {
     points: shown, colorOf, selected, onSelect: setSelected, type, view: view.current, onView, fitKey, pin,
-    me, nearest, following, locked: following && locked, onUnlock: () => setLocked(false), focus, rain,
+    me, nearest, following, locked: following && locked, onUnlock: () => setLocked(false), focus, rain, areas,
   }
 
   return (
@@ -337,6 +369,7 @@ export default function MapsPage() {
             {data.status === 'ready'
               ? `${nf.format(data.points.length)} จุดบนแผนที่ · ${data.suppliers.length} ผู้ให้บริการ`
                 + (showSt && st.points.length ? ` · ปั๊มน้ำมัน ${nf.format(st.points.length)} แห่ง` : '')
+                + (showOff && showPlat && off.platforms.length ? ` · แท่นผลิต ${nf.format(off.platforms.length)} แห่ง` : '')
               : 'ข้อมูลพิกัดจาก Google Sheet'}
             {data.at && ` · อัปเดต ${new Date(data.at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`}
           </p>
@@ -422,6 +455,32 @@ export default function MapsPage() {
             )}
           </div>
 
+          <div className="sup-list st-list" role="group" aria-label="งานออฟชอร์: แท่นผลิตและแปลงสัมปทานปิโตรเลียม">
+            <button type="button" className={`sup st-toggle off-toggle${showOff ? ' on' : ''}`} aria-pressed={showOff}
+              onClick={() => setShowOff((v) => !v)}
+              title={showOff ? 'ซ่อนงานออฟชอร์' : `แสดงแท่นผลิตและแปลงสัมปทานปิโตรเลียม (${DMF_CREDIT})`}>
+              <Anchor size={13} />
+              <span>งานออฟชอร์</span>
+              <em>{off.status === 'loading' ? 'กำลังโหลด…' : showOff ? 'เปิด' : 'ปิด'}</em>
+            </button>
+            {showOff && off.status === 'ready' && (
+              <>
+                <button type="button" className={`sup${showPlat ? '' : ' off'}`} aria-pressed={showPlat} onClick={() => setShowPlat((v) => !v)}
+                  title="แท่นผลิตปิโตรเลียม (คลิก = ซ่อน/แสดง)">
+                  <i className="plat-dot" style={{ background: PLATFORM_COLOR }} />
+                  <span>แท่นผลิต</span>
+                  <em>{nf.format(off.platforms.length)}</em>
+                </button>
+                <button type="button" className={`sup${showAreas ? '' : ' off'}`} aria-pressed={showAreas} onClick={() => setShowAreas((v) => !v)}
+                  title="แปลงสัมปทานปิโตรเลียม (คลิก = ซ่อน/แสดง)">
+                  <i className="area-dot" style={{ borderColor: PLATFORM_COLOR }} />
+                  <span>แปลงสัมปทาน</span>
+                  <em>{nf.format(off.areas?.features.length ?? 0)}</em>
+                </button>
+              </>
+            )}
+          </div>
+
           <label className="inview">
             <input type="checkbox" checked={inView} onChange={(e) => setInView(e.target.checked)} />
             <Crosshair size={14} /> เฉพาะจุดในขอบเขตแผนที่ (เรียงจากใกล้กึ่งกลาง)
@@ -457,13 +516,17 @@ export default function MapsPage() {
                 <a className="more" href={googleMapsLink(selected)} target="_blank" rel="noopener noreferrer">
                   <ExternalLink size={14} /> Google Maps
                 </a>
-                <a className="more" href={navLink(selected)} target="_blank" rel="noopener noreferrer">
-                  <Navigation size={14} /> นำทาง
-                </a>
-                <button type="button" className="more"
-                  onClick={() => setSv({ lat: selected.lat, lng: selected.lng, name: selected.name, key: Date.now() })}>
-                  <Eye size={14} /> Street View
-                </button>
+                {selected.kind !== 'platform' && ( // no roads or street imagery out at sea
+                  <>
+                    <a className="more" href={navLink(selected)} target="_blank" rel="noopener noreferrer">
+                      <Navigation size={14} /> นำทาง
+                    </a>
+                    <button type="button" className="more"
+                      onClick={() => setSv({ lat: selected.lat, lng: selected.lng, name: selected.name, key: Date.now() })}>
+                      <Eye size={14} /> Street View
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -525,7 +588,7 @@ export default function MapsPage() {
                 <div className={`near-bar${following ? ' following' : ''}`}>
                   <button type="button" className="nb-row" onClick={() => goNearest(nearest[0].p)} title="ไปที่จุดนี้">
                     <span className="nb-dot" />
-                    <span className="nb-label">{nearest[0].p.kind === 'station' ? '⛽ ปั๊มใกล้สุด' : 'ใกล้สุด'}</span>
+                    <span className="nb-label">{nearest[0].p.kind === 'station' ? '⛽ ปั๊มใกล้สุด' : nearest[0].p.kind === 'platform' ? 'แท่นใกล้สุด' : 'ใกล้สุด'}</span>
                     <span className="nb-name">{nearest[0].p.kind === 'station' ? `${nearest[0].p.supplier} · ` : ''}{nearest[0].p.name}</span>
                     <span className="nb-dist">{formatDist(nearest[0].km)}</span>
                   </button>
