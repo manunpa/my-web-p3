@@ -22,6 +22,18 @@ export const PERIODS = [
 ]
 
 export const times = (v) => `${nf.format(Math.round(v))} ครั้ง`
+
+// Link to a report on the Reports page with the dashboard's current period (and custom range).
+// id: a report id, or { src } for the list of a dashboard's reports. opts: report options (o.<name>).
+export function reportHref(id, period, custom, opts = {}) {
+  const q = new URLSearchParams()
+  if (typeof id === 'string') q.set('r', id)
+  else q.set('src', id.src)
+  q.set('p', period)
+  if (period === 'custom' && custom) { if (custom.from) q.set('from', custom.from); if (custom.to) q.set('to', custom.to) }
+  for (const [k, v] of Object.entries(opts)) if (v !== undefined && v !== null && v !== '') q.set(`o.${k}`, v)
+  return `#/reports?${q}`
+}
 export const dShort = (d) => d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
 export const dDay = (d) => d.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' })
 export const dTime = (d) => (d ? d.toLocaleString('th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '–')

@@ -70,6 +70,14 @@ export function useProgress(key, ms = 1100) {
   return p
 }
 
+// Small table glyph after a linked panel title (kept local so charts.jsx needs no icon library).
+const TableIcon = () => (
+  <svg className="panel-link-ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M9 10v10" />
+  </svg>
+)
+
 // Gold border glow that follows the pointer inside a panel.
 const glow = (e) => {
   const r = e.currentTarget.getBoundingClientRect()
@@ -77,13 +85,16 @@ const glow = (e) => {
   e.currentTarget.style.setProperty('--cy', e.clientY - r.top + 'px')
 }
 
-export function Panel({ className = '', i = 0, title, note, actions, children }) {
+// href: the title links there (used to open the panel's table on the Reports page).
+export function Panel({ className = '', i = 0, title, note, actions, href, children }) {
   return (
     <section className={`panel ${className}`} style={{ '--i': i }} onPointerMove={glow}>
       {(title || note || actions) && (
         <div className="panel-head">
           <div>
-            {title && <h2>{title}</h2>}
+            {title && (href
+              ? <h2><a className="panel-link" href={href} title="เปิดเป็นตารางรายงาน">{title}<TableIcon /></a></h2>
+              : <h2>{title}</h2>)}
             {note && <span className="muted">{note}</span>}
           </div>
           {actions}

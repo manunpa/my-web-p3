@@ -620,3 +620,57 @@ input[type=date],input[type=datetime-local],input[type=time],input[type=month]{m
 .conv-src ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}
 .conv-src li.warn{display:flex;align-items:center;gap:6px;color:var(--warn-text)}
 .conv-src.bad,.conv-src.bad svg{color:var(--err);stroke:var(--err)}
+
+/* ---------- Reports page and report links ---------- */
+.rep-btn{display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--field);color:var(--text);font-size:13px;font-weight:600;text-decoration:none}
+.rep-btn:hover{border-color:var(--gold-text);color:var(--gold-text)}
+.panel-link{color:inherit;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.panel-link-ic{opacity:0;color:var(--gold-text);transition:opacity .15s}
+.panel-link:hover{color:var(--gold-text);text-decoration:underline;text-underline-offset:3px}
+.panel-link:hover .panel-link-ic,.panel-link:focus-visible .panel-link-ic{opacity:1}
+@media (hover:none){.panel-link-ic{opacity:.45}}
+.rep-controls{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end;margin-bottom:14px}
+.rep-field{display:grid;gap:6px;font-size:12px;color:var(--muted)}
+.rep-field>span{font-weight:600}
+.rep-field select{height:40px;min-width:260px;max-width:100%;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:var(--field);color:var(--text);font:inherit;font-size:14px}
+.rep-field select option,.rep-field select optgroup{background:var(--bg);color:var(--text)}
+.rep-catalog{display:grid;gap:14px}
+.rep-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.rep-card{display:grid;gap:4px;text-align:left;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--field);color:var(--text);font:inherit;cursor:pointer}
+.rep-card strong{font-size:13.5px}
+.rep-card span{font-size:12px;color:var(--muted)}
+.rep-card:hover{border-color:var(--gold-text)}
+.rep-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;margin-bottom:10px}
+.rep-head h2{margin:2px 0 4px;font-size:18px}
+.rep-head p{margin:0;font-size:12.5px}
+.rep-src{color:var(--gold-text);font-weight:700;font-size:11.5px!important;letter-spacing:.02em}
+.rep-gen{font-size:11.5px!important}
+.rep-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start}
+.rep-actions .more{display:inline-flex;align-items:center;gap:6px}
+.rep-notes{margin:0 0 12px;padding:10px 14px 10px 28px;border-radius:10px;background:rgba(250,204,21,.08);border:1px solid var(--line);font-size:12.5px;display:grid;gap:3px}
+.rep-tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
+.rep-tools .search{flex:0 1 320px;height:38px}
+.report{font-size:12.5px;min-width:100%}
+.report th{white-space:nowrap}
+.report td{padding:7px 10px}
+.report td.nowrap{white-space:nowrap}
+.report td.wrap{white-space:normal;min-width:220px;max-width:420px}
+.th-sort{display:inline-flex;align-items:center;gap:4px;background:none;border:0;padding:0;color:inherit;font:inherit;font-weight:inherit;cursor:pointer}
+.report tr.can-open{cursor:pointer}
+.report tr.can-open:hover td{background:rgba(250,204,21,.06)}
+.report tr.open td{background:rgba(250,204,21,.1)}
+.rep-caret{width:22px;color:var(--muted)}
+.report tfoot td{font-weight:700;border-top:2px solid var(--line)}
+.rep-detail-row>td{padding:0 0 12px 22px!important;background:transparent!important}
+.rep-detail{border-left:3px solid var(--gold-text);padding:8px 0 0 12px;overflow-x:auto}
+.report.sub{font-size:12px}
+.more.small{height:28px;margin-top:6px;font-size:12px}
+.rep-hint{margin-top:10px}
+@media print{
+  .theme-btn,.session,.dash-head,.rep-controls,.range-bar,.rep-actions,.rep-tools,.rep-hint,.table-foot,.rep-caret,.rep-catalog{display:none!important}
+  .stage,.panel,.rep-sheet{background:#fff!important;color:#000!important;box-shadow:none!important;border:0!important;backdrop-filter:none!important}
+  .report{font-size:10.5px}
+  .report th,.report td{color:#000!important;border-color:#bbb!important}
+  .table-scroll{overflow:visible!important}
+  body{background:#fff!important}
+}

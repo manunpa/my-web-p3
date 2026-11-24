@@ -17,6 +17,7 @@ import { saveUser } from './saveUser'
 // The map page pulls in the map libraries, so it is only downloaded when opened.
 const MapsPage = lazy(() => import('./MapsPage'))
 const DocumentsPage = lazy(() => import('./DocumentsPage'))
+const ReportsPage = lazy(() => import('./ReportsPage'))
 
 // How long a sign-in lasts before the user is signed out automatically.
 // Keep in sync with duration.value(30, 'm') in firestore.rules.
@@ -32,6 +33,7 @@ const ROUTES = {
   '/dashboard/behavior': BehaviorDashboard,
   '/maps': MapsPage,
   '/documents': DocumentsPage,
+  '/reports': ReportsPage,
   '/notifications': NotificationsPage, // opens PMS Desk
   '/notifications/pms': (props) => <NotificationsPage {...props} source="pms" />,
   '/notifications/pms2': (props) => <NotificationsPage {...props} source="pms2" />,
@@ -45,7 +47,8 @@ const ROUTES = {
   '/notifications/bsrc2': (props) => <NotificationsPage {...props} source="bsrc2" />,
 }
 
-const currentRoute = () => location.hash.replace(/^#/, '') || '/'
+// "#/reports?r=leo-hotspots&p=30" -> "/reports": the part after "?" belongs to the page itself.
+const currentRoute = () => location.hash.replace(/^#/, '').split('?')[0] || '/'
 
 export default function App() {
   return (

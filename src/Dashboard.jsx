@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Bell, ShieldAlert, XCircle, Timer, RefreshCw, Search,
-  CheckCircle2, Clock3, AlertTriangle,
+  CheckCircle2, Clock3, AlertTriangle, Table2,
 } from 'lucide-react'
 import { loadAlerts, API_URL, REFRESH_MS } from './fleetData'
 import { STOP_TYPE_NAMES, OTHER_TYPE } from './stopType'
@@ -12,7 +12,7 @@ import {
 import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, HourHeat, MonthBars, Empty, nf } from './charts'
 import {
   DAY, times, dShort, dDay, dTime, hm, startOfDay, pctChange, countBy, toInput, rangeFor, monthly,
-  DashTabs, PeriodPicker, RangeBar, usePointerGlow,
+  DashTabs, PeriodPicker, RangeBar, usePointerGlow, reportHref,
 } from './dashShared'
 
 // Alert types: 3 validated categorical colors, the rest folded into a neutral "อื่นๆ".
@@ -578,6 +578,8 @@ export default function Dashboard() {
   }
 
   const badRange = period === 'custom' && !range
+  // Panel title -> its table on the Reports page, with this page's period and the panel's choices.
+  const rep = (id, opts) => reportHref(id, period, custom, opts)
 
   return (
     <div className="stage scroll" ref={stage}>
@@ -595,6 +597,9 @@ export default function Dashboard() {
           <button type="button" className="icon-btn" onClick={load} disabled={busy} aria-label="โหลดข้อมูลใหม่" title="โหลดข้อมูลใหม่">
             <RefreshCw size={16} className={busy ? 'spin' : ''} />
           </button>
+          <a className="rep-btn" href={rep({ src: 'leo' })} title="ดูข้อมูลของกล่องในหน้านี้เป็นตาราง และส่งออก Excel / CSV">
+            <Table2 size={15} /> รายงาน
+          </a>
           <PeriodPicker period={period} onChoose={choose} />
         </header>
 
@@ -633,7 +638,7 @@ export default function Dashboard() {
             </div>
 
             <div className="dash-grid">
-              <Panel className="span-2" i={4} title="จำนวนแจ้งเตือนรายวัน"
+              <Panel className="span-2" i={4} href={rep('leo-daily')} title="จำนวนแจ้งเตือนรายวัน"
                 note={`${nf.format(data.rows.length)} ครั้ง · ${dShort(data.daily[0].date)} – ${dShort(data.daily.at(-1).date)}`}>
                 {data.rows.length ? (
                   <LineChart data={data.daily} animKey={animKey} format={times} integer
@@ -656,7 +661,7 @@ export default function Dashboard() {
                 </ul>
               </Panel>
 
-              <Panel i={7} title="อันดับสูงสุด" note="จำนวนแจ้งเตือน (10 อันดับ)"
+              <Panel i={7} href={rep('leo-rank', { by: rank })} title="อันดับสูงสุด" note="จำนวนแจ้งเตือน (10 อันดับ)"
                 actions={(
                   <div className="seg-ctl small" role="radiogroup" aria-label="จัดอันดับตาม">
                     {RANKS.map((r) => (
@@ -668,11 +673,11 @@ export default function Dashboard() {
                 <RankBars key={rank + animKey} data={data.ranks[rank].slice(0, 10)} format={times} total={data.rows.length} />
               </Panel>
 
-              <Panel className="span-2" i={8} title="ประเภทการจอด" note="แยกจากคำในสาเหตุที่ปลดล็อค">
+              <Panel className="span-2" i={8} href={rep('leo-shares')} title="ประเภทการจอด" note="แยกจากคำในสาเหตุที่ปลดล็อค">
                 <RankBars key={animKey} data={data.stopTypes} format={times} total={data.rows.length} />
               </Panel>
 
-              <Panel className="span-3" i={9} title="ประเภทการจอดรายเดือน"
+              <Panel className="span-3" i={9} href={rep('leo-type-month')} title="ประเภทการจอดรายเดือน"
                 note={`12 เดือนล่าสุด · 3 ประเภทที่พบบ่อยสุด แยกสี ที่เหลือรวมเป็น "ประเภทอื่น" · คลิกแท่งเพื่อดูเดือนนั้น`}>
                 <MonthBars months={stopMonths} active={(i) => stopMonths[i].active} onPick={pickMonth}
                   format={times} animKey={state.at?.getTime()} />
@@ -683,20 +688,20 @@ export default function Dashboard() {
                 </ul>
               </Panel>
 
-              <Panel className="span-2" i={10} title="ประเภทการจอด × ช่วงเวลา"
+              <Panel className="span-2" i={10} href={rep('leo-type-hour')} title="ประเภทการจอด × ช่วงเวลา"
                 note="แต่ละช่อง = จำนวนเคสของประเภทนั้นในชั่วโมงที่เริ่ม (สีเข้ม = บ่อย)">
                 <HourHeat key={animKey} rows={data.stopHeat} format={times} />
               </Panel>
 
-              <Panel i={11} title="เวลาจอดเฉลี่ยตามประเภท" note="นาทีต่อเคส · เฉพาะประเภทที่มีอย่างน้อย 3 เคส">
+              <Panel i={11} href={rep('leo-shares')} title="เวลาจอดเฉลี่ยตามประเภท" note="นาทีต่อเคส · เฉพาะประเภทที่มีอย่างน้อย 3 เคส">
                 <RankBars key={animKey} data={data.stopAvg} format={fmtMin} />
               </Panel>
 
-              <Panel className="span-2" i={12} title="ช่วงเวลาที่เกิดแจ้งเตือน" note="รวมทุกวัน แยกตามชั่วโมงที่เริ่ม (แท่งสว่าง = ช่วงที่เกิดบ่อยสุด)">
+              <Panel className="span-2" i={12} href={rep('leo-type-hour')} title="ช่วงเวลาที่เกิดแจ้งเตือน" note="รวมทุกวัน แยกตามชั่วโมงที่เริ่ม (แท่งสว่าง = ช่วงที่เกิดบ่อยสุด)">
                 {data.rows.length ? <HourBars key={animKey} counts={data.hours} format={times} /> : <Empty />}
               </Panel>
 
-              <Panel i={13} title="เจาะลึกประเภทการจอด" note={drill ? `ใครเกิด "${drill}" บ่อยสุด (10 อันดับ)` : ''}
+              <Panel i={13} href={rep('leo-rank', { by: drillBy, type: drill })} title="เจาะลึกประเภทการจอด" note={drill ? `ใครเกิด "${drill}" บ่อยสุด (10 อันดับ)` : ''}
                 actions={(
                   <div className="drill-ctl">
                     <label className="f type-pick small">
@@ -716,7 +721,7 @@ export default function Dashboard() {
                   total={data.stopTypes.find((t) => t.name === drill)?.value} />
               </Panel>
 
-              <Panel className="span-2" i={14} title="จุดที่เกิดซ้ำ"
+              <Panel className="span-2" i={14} href={rep('leo-hotspots', { level: hotLevel })} title="จุดที่เกิดซ้ำ"
                 note={hotLevel === 'district'
                   ? '12 อำเภอ/เขต ที่มีเคสมากสุดในช่วงที่เลือก รวมทุกตำบลในอำเภอ · ที่อยู่ที่ไม่ระบุอำเภอนับเป็นจังหวัด'
                   : '12 ตำบล · อำเภอ ที่มีเคสมากสุดในช่วงที่เลือก · ที่อยู่ที่ไม่ระบุตำบลนับเป็นจังหวัด'}
@@ -731,43 +736,43 @@ export default function Dashboard() {
                 <Hotspots data={data.hot[hotLevel]} />
               </Panel>
 
-              <Panel i={15} title="แจ้งเตือนที่ไม่ต้องตรวจจริง" note={`ไฟแดง/จราจร ที่จอดไม่เกิน ${SHORT_MIN} นาที`}>
+              <Panel i={15} href={rep('leo-noise')} title="แจ้งเตือนที่ไม่ต้องตรวจจริง" note={`ไฟแดง/จราจร ที่จอดไม่เกิน ${SHORT_MIN} นาที`}>
                 <NoisePanel data={data.noise} months={noiseMonths} />
               </Panel>
 
-              <Panel className="span-2" i={16} title="วันในสัปดาห์ × ช่วงเวลา"
+              <Panel className="span-2" i={16} href={rep('leo-week-hour')} title="วันในสัปดาห์ × ช่วงเวลา"
                 note="แต่ละช่อง = จำนวนเคสที่เริ่มในวันและชั่วโมงนั้น (สีเข้ม = หนาแน่น) ใช้ดูการจัดคนเข้ากะ">
                 <HourHeat key={animKey} rows={data.week} format={times} />
               </Panel>
 
-              <Panel i={17} title="เวลาตอบสนองของผู้ปลด" note="ยิ่งน้อยยิ่งเร็ว">
+              <Panel i={17} href={rep('leo-response')} title="เวลาตอบสนองของผู้ปลด" note="ยิ่งน้อยยิ่งเร็ว">
                 <ResponsePanel data={data.resp} />
               </Panel>
 
-              <Panel className="span-2" i={18} title="สัดส่วนแจ้งเตือนตามประเภทการจอด"
+              <Panel className="span-2" i={18} href={rep('leo-shares')} title="สัดส่วนแจ้งเตือนตามประเภทการจอด"
                 note={`แต่ละประเภทคิดเป็นกี่ % ของ ${nf.format(data.shares.total)} แจ้งเตือนในช่วงที่เลือก`}>
                 <ShareTable data={data.shares} colorOf={(n) => STOP_COLORS[stopPal.top.indexOf(n)]}
                   compare={data.shares.compare} />
               </Panel>
 
-              <Panel i={19} title="เคสไม่อนุมัติ">
+              <Panel i={19} href={rep('leo-rejected')} title="เคสไม่อนุมัติ">
                 <RejectedPanel data={data.rej} />
               </Panel>
 
-              <Panel className="span-3" i={20} title="เกณฑ์การไม่อนุมัติของผู้ปลด แยกตามประเภท"
+              <Panel className="span-3" i={20} href={rep('leo-reject-matrix')} title="เกณฑ์การไม่อนุมัติของผู้ปลด แยกตามประเภท"
                 note="ประเภทเดียวกัน ผู้ปลดแต่ละคนไม่อนุมัติกี่ % ใช้ดูว่าทีมใช้เกณฑ์เดียวกันไหม">
                 <Consistency m={data.rejM} />
               </Panel>
 
-              <Panel className="span-2" i={21} title="รายการเคสไม่อนุมัติ" note="เรียงจากล่าสุด · ดูว่าเคสแบบไหนโดนไม่อนุมัติ">
+              <Panel className="span-2" i={21} href={rep('leo-rejected')} title="รายการเคสไม่อนุมัติ" note="เรียงจากล่าสุด · ดูว่าเคสแบบไหนโดนไม่อนุมัติ">
                 <RejectList rows={data.rej.list} />
               </Panel>
 
-              <Panel i={22} title="ไม่อนุมัติรายสัปดาห์" note="จำนวนเคส · % ของเคสที่พิจารณาในสัปดาห์นั้น">
+              <Panel i={22} href={rep('leo-reject-weeks')} title="ไม่อนุมัติรายสัปดาห์" note="จำนวนเคส · % ของเคสที่พิจารณาในสัปดาห์นั้น">
                 <RejectWeeks weeks={data.rejWeeks} />
               </Panel>
 
-              <Panel className="span-3" i={23} title="รายการแจ้งเตือน" note="เรียงจากล่าสุด">
+              <Panel className="span-3" i={23} href={rep('leo-cases')} title="รายการแจ้งเตือน" note="เรียงจากล่าสุด">
                 <AlertsTable rows={data.rows} />
               </Panel>
             </div>
