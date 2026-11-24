@@ -153,7 +153,7 @@ export default function DocumentsPage() {
       if (!res.keep && head.kmSource) res.notes.unshift(`ระยะทางจาก${head.kmSource}`)
       head.calc = res
       if (!res.keep) {
-        if (!res.departFromPlan) { head.cells[7] = fmtCell(res.depart); head.autoDepart = true }
+        if (!res.departFromPlan) { head.cells[7] = fmtCell(res.leaveDepot); head.autoDepart = true }
         if (!head.typed8) { head.cells[8] = fmtCell(res.start); head.autoStart = true }
       }
       trip.forEach((r, k) => { if (k && res.drops[k]) r.dropWarn = res.drops[k] })
@@ -357,7 +357,7 @@ export default function DocumentsPage() {
                 <span className="muted">
                   คำนวณ {calcDone} เที่ยว · ใช้เวลาออกจากแผน {calcKept} เที่ยว (ดรอปแรกไม่มีระยะทาง หรือพิมพ์เวลาออกเอง · ถือเป็นเวลาออกจากหน่วยงาน แล้วคิดต่อไปข้างหน้า)
                   {calcWarn > 0 && <b className="conv-warn-count"> · ควรเช็ก {calcWarn} แถว</b>}
-                  {' '}· สิบล้อ {SPEED['10W']} / หัวลาก {SPEED.SEMI} กม./ชม. · ออกเดินทาง = ออกจากหน่วยงาน · เริ่มงาน = ถึงคลัง (ออกจากคลัง − G2G) · สูตรเดียวกับ PlanCheck · ฟอร์มที่ส่งออกเหมือนเดิม
+                  {' '}· สิบล้อ {SPEED['10W']} / หัวลาก {SPEED.SEMI} กม./ชม. · ช่องออกเดินทางในไฟล์ = ออกจากคลัง · เวลาเริ่มงาน = ถึงคลัง (ออกจากคลัง − G2G) · เวลาออกจากหน่วยงานแสดงในรายละเอียดคำนวณ
                   <br />เวลาออกที่คำนวณจะติดไปกับไฟล์ PlanCheck จะใช้ตามไฟล์ ไม่คำนวณซ้ำ
                 </span>
               )}

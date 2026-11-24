@@ -1,13 +1,13 @@
-// "Calculate the times" mode of the Plan Converter. Same rules as PlanCheck (SC Carrier), which
-// reads the plan's "วัน/เวลา ที่ต้องออกเดินทาง" as the time the truck leaves its home unit:
+// "Calculate the times" mode of the Plan Converter.
+// PlanCheck treats the exported "วัน/เวลา ที่ต้องออกเดินทาง" as leaving the loading depot.
+// Test 4 confirmed this: an exported 16:34 became a depot departure, and PlanCheck derived SRC 14:19.
+// Keep the operating timeline distinct from the template columns:
 //
-//   leave the depot  = arrive at the first drop − distance ÷ speed (rounded to the minute)
-//   arrive at depot  = leave the depot − G2G of that depot          -> เวลาที่ต้องมาเริ่มงาน
-//   leave home unit  = arrive at depot − run time unit → depot     -> วัน/เวลา ที่ต้องออกเดินทาง
-// When the unit is the depot (BPK โหลดเก็บ) or the run time is not known, leaving the unit is
-// leaving the depot, and start work = departure − G2G (30 min when the depot has none).
-// A trip whose first drop has no distance keeps the plan's departure (= leaving the unit) and the
-// rest follows forward from it, as PlanCheck does.
+//   leave depot  = arrive at the first drop − distance ÷ speed (rounded to the minute)
+//   arrive depot = leave depot − G2G of that depot                         -> เวลาเริ่มงาน
+//   leave unit   = arrive depot − run time unit → depot                    -> shown in calculation notes
+// DocumentsPage writes leaveDepot to the template's departure column so PlanCheck derives leaveUnit.
+// When a trip has no distance, the plan departure means leaving the depot; derive earlier times from it.
 //
 // The values below are a copy of PlanCheck's settings screens (คลัง / เวลาโหลด G2G, เวลาวิ่ง หน่วยงาน → คลัง,
 // รถ / Fleet) as of 24/11/2569. Change them here when those screens change.
@@ -100,8 +100,9 @@ const inWindow = (d, [a, b]) => { const x = minOfDay(d); return x >= hmToMin(a) 
 
 // One trip: `rows` are its rows' cells (first drop first), after edits and the distance fill.
 // `fileUnit` is the home unit set for the file (คลังต้นทาง ถ้าในไฟล์ไม่มี), used when a vehicle belongs
-// to two units. `fixedDepart`: the departure cell was typed in the table, so it is used as is.
-// Returns { depart, start, departFromPlan, notes, warns, drops } or { keep: true, notes, warns, drops }.
+// to two units. The template's departure cell is a leave-depot time; `depart` in the result is leave-unit.
+// `fixedDepart`: the departure cell was typed in the table, so it is kept as the leave-depot time.
+// Returns { depart, start, leaveDepot, departFromPlan, notes, warns, drops } or { keep: true, ... }.
 export function calcTrip(rows, fileUnit, fixedDepart = false) {
   const first = rows[0]
   const notes = []
@@ -147,17 +148,12 @@ export function calcTrip(rows, fileUnit, fixedDepart = false) {
     leaveUnit = run ? new Date(atDepot.getTime() - run.min * MIN) : leaveDepot
     notes.unshift(`${TYPE_LABEL[type]} ${speed} กม./ชม. · ${km} กม. ≈ ${dur(runMin)} ชม.`)
   } else if (planDepart) {
-    // Forwards from the plan's departure, which is leaving the home unit.
+    // The template's departure is leaving the depot. Derive the earlier arrival and unit departure.
     departFromPlan = true
-    leaveUnit = planDepart
-    if (run) {
-      atDepot = new Date(leaveUnit.getTime() + run.min * MIN)
-      leaveDepot = new Date(atDepot.getTime() + load * MIN)
-    } else {
-      leaveDepot = leaveUnit
-      atDepot = new Date(leaveDepot.getTime() - load * MIN)
-    }
-    notes.unshift(fixedDepart ? 'ใช้เวลาออกที่พิมพ์ไว้' : `${arrive ? 'ดรอปแรกไม่มีระยะทาง' : 'ไม่มีเวลาถึงลูกค้า'} · ใช้เวลาออกจากแผน`)
+    leaveDepot = planDepart
+    atDepot = new Date(leaveDepot.getTime() - load * MIN)
+    leaveUnit = run ? new Date(atDepot.getTime() - run.min * MIN) : leaveDepot
+    notes.unshift(fixedDepart ? 'ใช้เวลาออกจากคลังที่พิมพ์ไว้' : `${arrive ? 'ดรอปแรกไม่มีระยะทาง' : 'ไม่มีเวลาถึงลูกค้า'} · ใช้เวลาออกจากแผน`)
   } else {
     return { keep: true, notes: [...notes, `${arrive ? 'ดรอปแรกไม่มีระยะทาง' : 'ไม่มีเวลาถึงลูกค้า'} และแผนไม่มีเวลาออก · คำนวณไม่ได้`], warns, drops }
   }
@@ -188,6 +184,6 @@ export function calcTrip(rows, fileUnit, fixedDepart = false) {
     if (t < soonest) drops[i] = `ดรอปนี้อาจไม่ทัน: ออกจากคลัง ${hm(leaveDepot)} ไป ${d} กม. ถึงเร็วสุดราว ${hm(soonest)}`
   }
 
-  if (!departFromPlan && planDepart && Math.abs(planDepart - leaveUnit) >= 30 * MIN) notes.push(`แผนเดิมออก ${hm(planDepart)}`)
+  if (!departFromPlan && planDepart && Math.abs(planDepart - leaveDepot) >= 30 * MIN) notes.push(`แผนเดิมออกจากคลัง ${hm(planDepart)}`)
   return { depart: leaveUnit, start: atDepot, leaveDepot, departFromPlan, notes, warns, drops }
 }
