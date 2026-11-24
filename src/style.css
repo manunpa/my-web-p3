@@ -926,3 +926,10 @@ input[type=date],input[type=datetime-local],input[type=time],input[type=month]{m
 .reset-btn.armed{border-color:var(--err);color:var(--err)}
 .reset-btn[disabled]{opacity:.5;cursor:default}
 @media (max-width:640px){.sample{grid-template-columns:minmax(0,1fr)}}
+
+/* maps: icon-only switches */
+.seg-ctl button.ic{min-width:38px;padding:0}
+.sup.layer-btn{justify-content:center;width:42px;padding:0}
+.sup.layer-btn.on{border-color:var(--gold);background:var(--gold);color:var(--ink)}
+.sup.layer-btn.st-toggle.on{border-color:#00a3e0;background:#00a3e014;color:#00a3e0}
+.sup.layer-btn.off-toggle.on{border-color:#0e7490;background:#0e749014;color:#0e7490}

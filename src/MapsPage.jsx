@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Search, RefreshCw, MapPin, Layers, Crosshair, X, Copy, Check, ExternalLink, AlertTriangle,
-  LocateFixed, Navigation, Fuel, Store, Car, Bus, Bike, Eye, CloudRain, Play, Pause, Anchor, Wind, Route,
+  LocateFixed, Navigation, Fuel, Store, MapPinned, Car, Bus, Bike, Eye, CloudRain, Play, Pause, Anchor, Wind, Route,
 } from 'lucide-react'
 import { loadOffshore, cachedOffshore, DMF_CREDIT, PLATFORM_GROUP, PLATFORM_COLOR } from './offshoreData'
 import { loadRainFrames, rainTimeLabel, lagLabel } from './rainRadar'
@@ -475,6 +475,9 @@ export default function MapsPage() {
 
   const onView = useCallback((v, b) => { view.current = v; setBounds(b); setCenter({ lat: v.lat, lng: v.lng }) }, [])
 
+  // one switch for every customer geofence
+  const geoOn = data.suppliers.some((s) => !hidden.has(s.name))
+  const toggleGeo = () => setHidden(geoOn ? new Set(data.suppliers.map((s) => s.name)) : new Set())
   const toggleSupplier = (name) => setHidden((h) => {
     const n = new Set(h)
     n.has(name) ? n.delete(name) : n.add(name)
@@ -724,9 +727,9 @@ export default function MapsPage() {
           {engine === 'google' && (
             <div className="seg-ctl" role="group" aria-label="ชั้นข้อมูลเพิ่มเติมของ Google">
               {GOOGLE_OVERLAYS.map(({ id, label, Icon }) => (
-                <button key={id} type="button" aria-pressed={overlays.has(id)} className={overlays.has(id) ? 'on' : ''}
+                <button key={id} type="button" aria-pressed={overlays.has(id)} className={`ic${overlays.has(id) ? ' on' : ''}`} aria-label={label}
                   onClick={() => toggleOverlay(id)} title={`${overlays.has(id) ? 'ซ่อน' : 'แสดง'}${label}`}>
-                  <Icon size={14} /> {label}
+                  <Icon size={16} />
                 </button>
               ))}
             </div>
@@ -765,52 +768,55 @@ export default function MapsPage() {
             )}
           </div>
 
-          <div className="sup-list st-list" role="group" aria-label="ชั้นปั๊มน้ำมัน (คลิกแบรนด์เพื่อซ่อน/แสดง, ดับเบิลคลิกเพื่อเลือกแบรนด์เดียว)">
-            <button type="button" className={`sup st-toggle${showSt ? ' on' : ''}`} aria-pressed={showSt}
-              onClick={() => setShowSt((v) => !v)} title={showSt ? 'ซ่อนปั๊มน้ำมัน' : 'แสดงปั๊มน้ำมันทุกแบรนด์บนแผนที่'}>
-              <Fuel size={13} />
-              <span>ปั๊มน้ำมัน</span>
-              <em>{st.status === 'loading' ? 'กำลังโหลด…' : showSt ? 'เปิด' : 'ปิด'}</em>
+          <div className="sup-list st-list" role="group" aria-label="เปิด/ปิดชั้นข้อมูลบนแผนที่">
+            <button type="button" className={`sup layer-btn${geoOn ? ' on' : ''}`} aria-pressed={geoOn} onClick={toggleGeo}
+              title={geoOn ? 'ซ่อน Geofence ทั้งหมด' : 'แสดง Geofence ทั้งหมด'} aria-label="Geofence">
+              <MapPinned size={16} />
             </button>
-            {showSt && st.brands.map((b) => (
-              <button key={b.name} type="button" className={`sup${hiddenBrands.has(b.name) ? ' off' : ''}`}
-                aria-pressed={!hiddenBrands.has(b.name)} onClick={() => toggleBrand(b.name)} onDoubleClick={() => onlyBrand(b.name)}
-                title="คลิก = ซ่อน/แสดง · ดับเบิลคลิก = ดูแบรนด์นี้แบรนด์เดียว">
-                <i className="fuel-dot" style={{ background: b.color, color: fuelInk(b.color) }}>⛽</i>
-                <span>{b.name}</span>
-                <em>{nf.format(b.mapped)}</em>
-              </button>
-            ))}
-            {showSt && hiddenBrands.size > 0 && (
-              <button type="button" className="sup reset" onClick={() => setHiddenBrands(new Set())}>ทุกแบรนด์</button>
-            )}
+            <button type="button" className={`sup layer-btn st-toggle${showSt ? ' on' : ''}`} aria-pressed={showSt}
+              onClick={() => setShowSt((v) => !v)} title={showSt ? 'ซ่อนปั๊มน้ำมัน' : 'แสดงปั๊มน้ำมันทุกแบรนด์บนแผนที่'} aria-label="ปั๊มน้ำมัน">
+              {st.status === 'loading' ? <RefreshCw size={16} className="spin" /> : <Fuel size={16} />}
+            </button>
+            <button type="button" className={`sup layer-btn off-toggle${showOff ? ' on' : ''}`} aria-pressed={showOff}
+              onClick={() => setShowOff((v) => !v)} aria-label="งานออฟชอร์"
+              title={showOff ? 'ซ่อนงานออฟชอร์' : `แสดงแท่นผลิตและแปลงสัมปทานปิโตรเลียม (${DMF_CREDIT})`}>
+              {off.status === 'loading' ? <RefreshCw size={16} className="spin" /> : <Anchor size={16} />}
+            </button>
           </div>
 
-          <div className="sup-list st-list" role="group" aria-label="งานออฟชอร์: แท่นผลิตและแปลงสัมปทานปิโตรเลียม">
-            <button type="button" className={`sup st-toggle off-toggle${showOff ? ' on' : ''}`} aria-pressed={showOff}
-              onClick={() => setShowOff((v) => !v)}
-              title={showOff ? 'ซ่อนงานออฟชอร์' : `แสดงแท่นผลิตและแปลงสัมปทานปิโตรเลียม (${DMF_CREDIT})`}>
-              <Anchor size={13} />
-              <span>งานออฟชอร์</span>
-              <em>{off.status === 'loading' ? 'กำลังโหลด…' : showOff ? 'เปิด' : 'ปิด'}</em>
-            </button>
-            {showOff && off.status === 'ready' && (
-              <>
-                <button type="button" className={`sup${showPlat ? '' : ' off'}`} aria-pressed={showPlat} onClick={() => setShowPlat((v) => !v)}
-                  title="แท่นผลิตปิโตรเลียม (คลิก = ซ่อน/แสดง)">
-                  <i className="plat-dot" style={{ background: PLATFORM_COLOR }} />
-                  <span>แท่นผลิต</span>
-                  <em>{nf.format(off.platforms.length)}</em>
+          {showSt && (
+            <div className="sup-list st-list" role="group" aria-label="ชั้นปั๊มน้ำมัน (คลิกแบรนด์เพื่อซ่อน/แสดง, ดับเบิลคลิกเพื่อเลือกแบรนด์เดียว)">
+              {showSt && st.brands.map((b) => (
+                <button key={b.name} type="button" className={`sup${hiddenBrands.has(b.name) ? ' off' : ''}`}
+                  aria-pressed={!hiddenBrands.has(b.name)} onClick={() => toggleBrand(b.name)} onDoubleClick={() => onlyBrand(b.name)}
+                  title="คลิก = ซ่อน/แสดง · ดับเบิลคลิก = ดูแบรนด์นี้แบรนด์เดียว">
+                  <i className="fuel-dot" style={{ background: b.color, color: fuelInk(b.color) }}>⛽</i>
+                  <span>{b.name}</span>
+                  <em>{nf.format(b.mapped)}</em>
                 </button>
-                <button type="button" className={`sup${showAreas ? '' : ' off'}`} aria-pressed={showAreas} onClick={() => setShowAreas((v) => !v)}
-                  title="แปลงสัมปทานปิโตรเลียม (คลิก = ซ่อน/แสดง)">
-                  <i className="area-dot" style={{ borderColor: PLATFORM_COLOR }} />
-                  <span>แปลงสัมปทาน</span>
-                  <em>{nf.format(off.areas?.features.length ?? 0)}</em>
-                </button>
-              </>
-            )}
-          </div>
+              ))}
+              {showSt && hiddenBrands.size > 0 && (
+                <button type="button" className="sup reset" onClick={() => setHiddenBrands(new Set())}>ทุกแบรนด์</button>
+              )}
+            </div>
+          )}
+
+          {showOff && off.status === 'ready' && (
+            <div className="sup-list st-list" role="group" aria-label="งานออฟชอร์">
+              <button type="button" className={`sup${showPlat ? '' : ' off'}`} aria-pressed={showPlat} onClick={() => setShowPlat((v) => !v)}
+                title="แท่นผลิตปิโตรเลียม (คลิก = ซ่อน/แสดง)">
+                <i className="plat-dot" style={{ background: PLATFORM_COLOR }} />
+                <span>แท่นผลิต</span>
+                <em>{nf.format(off.platforms.length)}</em>
+              </button>
+              <button type="button" className={`sup${showAreas ? '' : ' off'}`} aria-pressed={showAreas} onClick={() => setShowAreas((v) => !v)}
+                title="แปลงสัมปทานปิโตรเลียม (คลิก = ซ่อน/แสดง)">
+                <i className="area-dot" style={{ borderColor: PLATFORM_COLOR }} />
+                <span>แปลงสัมปทาน</span>
+                <em>{nf.format(off.areas?.features.length ?? 0)}</em>
+              </button>
+            </div>
+          )}
 
           <RoutePlanner
             stops={plan.stops} open={planOpen} onToggle={setPlanOpen} busy={planBusy} hasMe={!!me} onAddMe={addMeStop} onAddCoord={addCoordStop}
