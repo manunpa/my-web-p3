@@ -137,7 +137,7 @@ export default function DocumentsPage() {
         // Where the distance came from, for the calculation notes (PlanCheck has its own customer distances).
         const kmSource = empty(6) ? null : typed(6) ? 'พิมพ์เอง' : autoKm
           ? (closeTo ? `ฐานข้อมูลระยะทาง (ชื่อใกล้เคียง "${closeTo}")` : 'ฐานข้อมูลระยะทาง') : 'ไฟล์แผน'
-        return { ...r, added: r.key.startsWith('n'), cells, autoKm, autoDepot, closeTo, geofence, kmSource, typed3: typed(3), typed7: typed(7), typed8: typed(8) }
+        return { ...r, added: r.key.startsWith('n'), cells, autoKm, autoDepot, closeTo, geofence, kmSource, typed7: typed(7), typed8: typed(8) }
       })
     if (mode !== 'calc') return out
     // Calculated times: trip by trip. A time typed in the table still wins. Only the two time
@@ -151,9 +151,6 @@ export default function DocumentsPage() {
       const head = trip[0]
       const res = calcTrip(trip.map((r) => r.cells), unitOf(head.key), head.typed7)
       if (!res.keep && head.kmSource) res.notes.unshift(`ระยะทางจาก${head.kmSource}`)
-      // A home unit in the depot cell with a single loading depot (SRC -> BSRC): write the depot, so
-      // PlanCheck gets the depot the times were worked out for. A typed depot is never replaced.
-      if (res.depot && !head.typed3) { head.cells[3] = res.depot; head.autoDepot = true }
       head.calc = res
       if (!res.keep) {
         if (!res.departFromPlan) { head.cells[7] = fmtCell(res.depart); head.autoDepart = true }

@@ -116,18 +116,7 @@ export function calcTrip(rows, fileUnit, fixedDepart = false) {
       : first[9] ? `ช่องทะเบียนเป็น "${first[9]}" ไม่ใช่ทะเบียน คิดแบบหัวลาก` : 'ไม่มีทะเบียน คิดแบบหัวลาก')
   }
   const speed = SPEED[type]
-  let dk = depotKey(first[3])
-  // The depot cell names a home unit (e.g. SRC from the file's default): when that unit loads at
-  // one depot only (SRC -> BSRC), that is the loading depot and the unit is where the truck leaves.
-  let setDepot = null
-  if (dk && UNITS.includes(dk) && !DEPOTS[dk]) {
-    const only = [...new Set(ROUTES.filter((r) => r[0] === dk).map((r) => r[1]))]
-    if (only.length === 1) {
-      fileUnit = dk
-      notes.push(`${dk} เป็นหน่วยงาน · คลังที่โหลดคือ ${only[0]} (คลังเดียวของ ${dk})`)
-      dk = setDepot = only[0]
-    }
-  }
+  const dk = depotKey(first[3])
   const depot = dk ? DEPOTS[dk] : null
   const g2g = depot?.g2g?.[type] ?? null
   const load = g2g ?? NO_G2G_MIN
@@ -141,10 +130,7 @@ export function calcTrip(rows, fileUnit, fixedDepart = false) {
 
   if (g2g) notes.push(`G2G ${dk} ${dur(g2g)}`)
   else if (depot) notes.push(`${dk} ${depot.note || 'ไม่มีค่า G2G'} · เริ่มงานก่อนออก ${NO_G2G_MIN} นาที`)
-  else if (UNITS.includes(dk)) {
-    const many = [...new Set(ROUTES.filter((r) => r[0] === dk).map((r) => r[1]))]
-    warns.push(`${dk} เป็นหน่วยงาน ไม่ใช่คลัง · ใส่คลังที่โหลดในช่องคลังต้นทาง${many.length ? ` (${many.join(' / ')})` : ''} · ตอนนี้ใช้เริ่มงานก่อนออก ${NO_G2G_MIN} นาที`)
-  }
+  else if (UNITS.includes(dk)) warns.push(`${dk} เป็นหน่วยงาน ไม่ใช่คลัง ยังไม่รู้คลังที่โหลด · ใช้เริ่มงานก่อนออก ${NO_G2G_MIN} นาที`)
   else notes.push(`${first[3] ? `ไม่รู้จักคลัง "${first[3]}"` : 'ไม่มีคลังที่โหลด'} · เริ่มงานก่อนออก ${NO_G2G_MIN} นาที`)
   if (depot && !atHome && !run) {
     warns.push(`ไม่รู้เวลาวิ่งจากหน่วยงาน${homes.length ? ` (${homes.join('/')})` : ''} ไป ${dk} · เวลาออกเดินทางเป็นเวลาออกจากคลัง ควรตรวจก่อนนำเข้า`)
@@ -203,5 +189,5 @@ export function calcTrip(rows, fileUnit, fixedDepart = false) {
   }
 
   if (!departFromPlan && planDepart && Math.abs(planDepart - leaveUnit) >= 30 * MIN) notes.push(`แผนเดิมออก ${hm(planDepart)}`)
-  return { depart: leaveUnit, start: atDepot, leaveDepot, depot: setDepot, departFromPlan, notes, warns, drops }
+  return { depart: leaveUnit, start: atDepot, leaveDepot, departFromPlan, notes, warns, drops }
 }
