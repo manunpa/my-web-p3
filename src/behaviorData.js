@@ -11,6 +11,25 @@ export const BEHAVIOR_API_URL =
 
 export const REFRESH_MS = 5 * 60 * 1000
 
+// Shared by the dashboard and the Reports page, so both count the same way.
+export const LATE_DAYS = 7 // a case waiting longer than this counts as overdue
+export const AGE_BANDS = [
+  { label: '0–3 วัน', test: (d) => d <= 3 },
+  { label: '4–7 วัน', test: (d) => d > 3 && d <= 7 },
+  { label: '8–14 วัน', test: (d) => d > 7 && d <= 14 },
+  { label: '15–30 วัน', test: (d) => d > 14 && d <= 30 },
+  { label: 'มากกว่า 30 วัน', test: (d) => d > 30 },
+]
+export const SPEED_BANDS = [
+  { label: 'ไม่เกิน 60', test: (s) => s <= 60 },
+  { label: '61–80', test: (s) => s > 60 && s <= 80 },
+  { label: '81–90', test: (s) => s > 80 && s <= 90 },
+  { label: '91–100', test: (s) => s > 90 && s <= 100 },
+  { label: 'มากกว่า 100', test: (s) => s > 100 },
+]
+// Days from the record's date to now.
+export const ageDays = (r) => Math.max(0, Math.floor((Date.now() - r.start) / 86400000))
+
 // Column names in the sheet -> field names. Matching ignores spaces, '/', '.', '-', '_', case
 // and doubled Thai vowel marks. Common misspellings are listed too.
 const FIELDS = {

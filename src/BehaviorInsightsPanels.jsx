@@ -514,50 +514,50 @@ function NearMiss({ n }) {
   )
 }
 
-export function BehaviorInsights({ d, compare, i0 }) {
+export function BehaviorInsights({ d, compare, i0, rep }) {
   return (
     <>
-      <Panel className="span-2" i={i0} title="ทำผิดซ้ำ และบทลงโทษไล่ระดับไหม" note="พขร. ที่มีบันทึก 2 ครั้งขึ้นไปในช่วงที่เลือก (15 อันดับ)">
+      <Panel className="span-2" i={i0} href={rep?.('bh-repeats')} title="ทำผิดซ้ำ และบทลงโทษไล่ระดับไหม" note="พขร. ที่มีบันทึก 2 ครั้งขึ้นไปในช่วงที่เลือก (15 อันดับ)">
         <Repeats rows={d.repeats} />
       </Panel>
-      <Panel i={i0 + 1} title="Near miss" note="บันทึกที่เกือบเกิดอุบัติเหตุ">
+      <Panel i={i0 + 1} href={rep?.('bh-near-miss')} title="Near miss" note="บันทึกที่เกือบเกิดอุบัติเหตุ">
         <NearMiss n={d.nearMiss} />
       </Panel>
-      <Panel className="span-3" i={i0 + 2} title="บทลงโทษแบบไหนได้ผล"
+      <Panel className="span-3" i={i0 + 2} href={rep?.('bh-effect-ba')} title="บทลงโทษแบบไหนได้ผล"
         note="ผลพิจารณาที่ให้ในช่วงที่เลือก · ดู 3 มุม: คนเดิมก่อน–หลัง, การทำผิดซ้ำ และไทม์ไลน์รายคน">
         <Effect rows={d.effect} all={d.all} inRange={d.rows} />
       </Panel>
-      <Panel className="span-3" i={i0 + 3} title="เกณฑ์ลงโทษของแต่ละหน่วยงาน" note="ผลพิจารณาของรายการที่ตอบกลับแล้ว แยกตามหน่วยงาน">
+      <Panel className="span-3" i={i0 + 3} href={rep?.('bh-unit-penalty')} title="เกณฑ์ลงโทษของแต่ละหน่วยงาน" note="ผลพิจารณาของรายการที่ตอบกลับแล้ว แยกตามหน่วยงาน">
         <UnitPenalty p={d.unitPenalty} />
       </Panel>
-      <Panel className="span-2" i={i0 + 4} title="คะแนนความเสี่ยงราย พขร." note="15 อันดับคะแนนสูงสุดในช่วงที่เลือก">
+      <Panel className="span-2" i={i0 + 4} href={rep?.('bh-scores')} title="คะแนนความเสี่ยงราย พขร." note="15 อันดับคะแนนสูงสุดในช่วงที่เลือก">
         <Scores s={d.scores} compare={compare} />
       </Panel>
-      <Panel i={i0 + 5} title="เบรก / เร่งกระชาก" note="รายการที่กรอกค่า G หรือความเร็วเริ่มต้น–ปลาย">
+      <Panel i={i0 + 5} href={rep?.('bh-harsh')} title="เบรก / เร่งกระชาก" note="รายการที่กรอกค่า G หรือความเร็วเริ่มต้น–ปลาย">
         <Harsh rows={d.harsh} />
       </Panel>
-      <Panel className="span-3" i={i0 + 6} title="สาเหตุ × ชนิดความผิด" note="ชนิดความผิดที่พบบ่อย 6 อันดับ แยกตามกลุ่มสาเหตุ">
+      <Panel className="span-3" i={i0 + 6} href={rep?.('bh-causes')} title="สาเหตุ × ชนิดความผิด" note="ชนิดความผิดที่พบบ่อย 6 อันดับ แยกตามกลุ่มสาเหตุ">
         <Causes c={d.causes} />
       </Panel>
-      <Panel className="span-3" i={i0 + 7} title="ความเหนื่อยล้า" note="ง่วง เมื่อยล้า ขับต่อเนื่องเกิน 4 ชม. · แยกตามชั่วโมงที่เกิดเหตุ">
+      <Panel className="span-3" i={i0 + 7} href={rep?.('bh-fatigue')} title="ความเหนื่อยล้า" note="ง่วง เมื่อยล้า ขับต่อเนื่องเกิน 4 ชม. · แยกตามชั่วโมงที่เกิดเหตุ">
         <Fatigue f={d.fatigue} />
       </Panel>
-      <Panel className="span-2" i={i0 + 8} title="ง่วงแล้วไม่ยอมหยุดพัก" note="ชนิดความผิด: ง่วง/เมื่อยล้า และไม่ให้ความร่วมมือ">
+      <Panel className="span-2" i={i0 + 8} href={rep?.('bh-non-coop')} title="ง่วงแล้วไม่ยอมหยุดพัก" note="ชนิดความผิด: ง่วง/เมื่อยล้า และไม่ให้ความร่วมมือ">
         <NonCoop c={d.nonCoop} />
       </Panel>
-      <Panel i={i0 + 9} title="ความเหนื่อยล้าต่อหน่วยงาน" note="เทียบเป็น % ของบันทึกในหน่วยงานเดียวกัน">
+      <Panel i={i0 + 9} href={rep?.('bh-fatigue-units')} title="ความเหนื่อยล้าต่อหน่วยงาน" note="เทียบเป็น % ของบันทึกในหน่วยงานเดียวกัน">
         <FatigueUnits rows={d.fatigueUnits} />
       </Panel>
-      <Panel className="span-2" i={i0 + 10} title="พขร. ที่ง่วงซ้ำ" note="มีบันทึกเรื่องความเหนื่อยล้า 2 ครั้งขึ้นไปในช่วงที่เลือก (15 อันดับ)">
+      <Panel className="span-2" i={i0 + 10} href={rep?.('bh-fatigue-repeats')} title="พขร. ที่ง่วงซ้ำ" note="มีบันทึกเรื่องความเหนื่อยล้า 2 ครั้งขึ้นไปในช่วงที่เลือก (15 อันดับ)">
         <FatigueRepeats rows={d.fatigueRepeats} />
       </Panel>
-      <Panel i={i0 + 11} title="แนวโน้มรายเดือน" note="% ของบันทึกทั้งหมดที่เป็นความเหนื่อยล้า (12 เดือน)">
+      <Panel i={i0 + 11} href={rep?.('bh-fatigue-months')} title="แนวโน้มรายเดือน" note="% ของบันทึกทั้งหมดที่เป็นความเหนื่อยล้า (12 เดือน)">
         <FatigueMonths months={d.fatigueMonths} />
       </Panel>
-      <Panel className="span-2" i={i0 + 12} title="ความเหนื่อยล้า: วัน × ช่วงเวลา" note="แต่ละช่อง = จำนวนเคสที่เกิดในวันและชั่วโมงนั้น (สีเข้ม = บ่อย)">
+      <Panel className="span-2" i={i0 + 12} href={rep?.('bh-fatigue-week')} title="ความเหนื่อยล้า: วัน × ช่วงเวลา" note="แต่ละช่อง = จำนวนเคสที่เกิดในวันและชั่วโมงนั้น (สีเข้ม = บ่อย)">
         <HourHeat rows={d.fatigueWeek} format={times} />
       </Panel>
-      <Panel i={i0 + 13} title="จุดที่ง่วงบ่อย" note="อำเภอ · จังหวัด ที่เกิดมากสุด 10 อันดับ">
+      <Panel i={i0 + 13} href={rep?.('bh-fatigue-places')} title="จุดที่ง่วงบ่อย" note="อำเภอ · จังหวัด ที่เกิดมากสุด 10 อันดับ">
         <FatiguePlaces rows={d.fatiguePlaces} />
       </Panel>
     </>

@@ -5,9 +5,10 @@ import { PeriodPicker, RangeBar, rangeFor, toInput, usePointerGlow } from './das
 import ReportTable from './ReportTable'
 import { downloadXlsx, downloadCSV, toTSV } from './reportExport'
 import { LEO_REPORTS, LEO_SOURCE } from './reports/leoReports'
+import { BEHAVIOR_REPORTS, BEHAVIOR_SOURCE } from './reports/behaviorReports'
 
 // Report catalog, grouped by the dashboard the reports come from. Add a source here to add a group.
-const SOURCES = [{ ...LEO_SOURCE, reports: LEO_REPORTS }]
+const SOURCES = [{ ...LEO_SOURCE, reports: LEO_REPORTS }, { ...BEHAVIOR_SOURCE, reports: BEHAVIOR_REPORTS }]
 const ALL = SOURCES.flatMap((s) => s.reports.map((r) => ({ ...r, source: s })))
 const byId = (id) => ALL.find((r) => r.id === id)
 
@@ -81,15 +82,26 @@ export default function ReportsPage() {
     return () => removeEventListener('hashchange', on)
   }, [])
 
-  const range = useMemo(() => (data.status === 'ready' ? rangeFor(data.records, period, custom) : null), [data, period, custom])
+  // Source filters (e.g. หน่วยงาน) come first, then the report's own options. Choices may depend on the data.
+  const options = useMemo(() => {
+    const list = [...(source?.filters || []), ...(def?.options || [])]
+    return list.map((o) => (typeof o.choices === 'function'
+      ? { ...o, choices: data.status === 'ready' ? o.choices(data.records) : [['', '…']] }
+      : o))
+  }, [source, def, data])
+  const filters = source?.filters || []
   const result = useMemo(() => {
-    if (!def || !range) return null
-    const rows = data.records.filter((r) => r.start >= range.from && r.start < range.to)
+    if (!def || data.status !== 'ready') return null
+    const opt = Object.fromEntries(options.map((o) => [o.id, opts[o.id] ?? o.choices[0][0]]))
+    const scoped = filters.length ? data.records.filter((r) => filters.every((f) => !opt[f.id] || r[f.key] === opt[f.id])) : data.records
+    const range = rangeFor(scoped, period, custom)
+    if (!range) return null
+    const rows = scoped.filter((r) => r.start >= range.from && r.start < range.to)
     const len = range.to - range.from
-    const prev = range.kind === 'all' ? null : data.records.filter((r) => r.start >= range.from - len && r.start < range.from)
-    const opt = Object.fromEntries((def.options || []).map((o) => [o.id, opts[o.id] ?? o.choices[0][0]]))
-    return { ...def.build({ rows, prev, all: data.records, range, opt }), count: rows.length, opt }
-  }, [def, range, data, opts])
+    const prev = range.kind === 'all' ? null : scoped.filter((r) => r.start >= range.from - len && r.start < range.from)
+    return { ...def.build({ rows, prev, all: data.records, scoped, range, opt }), count: rows.length, opt, range }
+  }, [def, data, options, filters, opts, period, custom])
+  const range = useMemo(() => result?.range ?? (data.status === 'ready' ? rangeFor(data.records, period, custom) : null), [result, data, period, custom])
 
   const choosePeriod = (p) => {
     if (p === 'custom' && period !== 'custom' && range) {
@@ -97,10 +109,15 @@ export default function ReportsPage() {
     }
     setPeriod(p)
   }
-  const pick = (rid) => { setId(rid); setOpts({}) }
+  // A new report starts from its own default options but keeps the source filters (หน่วยงาน).
+  const pick = (rid) => {
+    const keep = byId(rid)?.source.filters || []
+    setId(rid)
+    setOpts((x) => Object.fromEntries(keep.filter((f) => x[f.id]).map((f) => [f.id, x[f.id]])))
+  }
 
   const periodText = range ? `ช่วง ${fmtDay(range.from)} – ${fmtDay(range.to - 1)}` : ''
-  const filterText = def && result ? (def.options || []).map((o) => {
+  const filterText = def && result ? options.map((o) => {
     const c = o.choices.find((x) => x[0] === result.opt[o.id])
     return `${o.label}: ${c ? c[1] : ''}`
   }).join(' · ') : ''
@@ -168,7 +185,7 @@ export default function ReportsPage() {
             <span>ช่วงวันที่</span>
             <PeriodPicker period={period} onChoose={choosePeriod} />
           </div>
-          {def?.options?.map((o) => (
+          {def && options.map((o) => (
             <div className="rep-field" key={o.id}>
               <span>{o.label}</span>
               {o.choices.length > 5 ? (
@@ -226,7 +243,7 @@ export default function ReportsPage() {
               <div>
                 <p className="rep-src">{source.label}</p>
                 <h2>{def.title}</h2>
-                <p className="muted">{periodText} · {result.count.toLocaleString('th-TH')} แจ้งเตือนในช่วงนี้{filterText && ` · ${filterText}`}</p>
+                <p className="muted">{periodText} · {result.count.toLocaleString('th-TH')} {source.noun || 'แจ้งเตือน'}ในช่วงนี้{filterText && ` · ${filterText}`}</p>
                 <p className="muted rep-gen">ออกรายงาน {generated}{data.at && ` · ข้อมูล ณ ${data.at.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`}</p>
               </div>
               <div className="rep-actions">

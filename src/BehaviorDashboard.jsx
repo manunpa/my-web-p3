@@ -1,9 +1,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, ClipboardList, CheckCircle2, Clock3, RefreshCw, Search, AlertTriangle, ShieldAlert, Siren,
-  ChevronDown, ExternalLink, Building2,
+  ChevronDown, ExternalLink, Building2, Table2,
 } from 'lucide-react'
-import { loadBehavior, BEHAVIOR_API_URL, REFRESH_MS } from './behaviorData'
+import { loadBehavior, BEHAVIOR_API_URL, REFRESH_MS, LATE_DAYS, AGE_BANDS, SPEED_BANDS, ageDays } from './behaviorData'
 import {
   repeats, penaltyEffect, penaltyByUnit, riskScores, nearMissByOffense, causeMatrix, fatigue, harshEvents,
   nonCooperation, fatigueRepeats, fatigueByUnit, fatigueWeek, fatiguePlaces, fatigueMonths,
@@ -12,7 +12,7 @@ import { BehaviorInsights } from './BehaviorInsightsPanels'
 import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, MonthBars, Empty, nf } from './charts'
 import {
   DAY, times, dShort, dDay, dTime, hm, startOfDay, pctChange, countBy, toInput, rangeFor, monthly,
-  DashTabs, PeriodPicker, RangeBar, usePointerGlow,
+  DashTabs, PeriodPicker, RangeBar, usePointerGlow, reportHref,
 } from './dashShared'
 
 const DONE_COLOR = '#199e70'
@@ -20,7 +20,6 @@ const WAIT_COLOR = '#e0a321'
 const TYPE_COLORS = ['#3987e5', '#d95926', '#8f6ae0']
 const OTHER_COLOR = '#898781'
 const RISK_COLORS = { 4: '#a8323a', 3: '#d0605a', 2: '#e0a321', 1: '#199e70', 0: OTHER_COLOR }
-const LATE_DAYS = 7 // a case waiting longer than this counts as overdue
 
 const RANKS = [
   { id: 'driver', label: 'พขร.' },
@@ -38,24 +37,7 @@ const DETAILS = [
   { id: 'ppe', label: 'อุปกรณ์ที่ไม่สวมใส่', skipBlank: true },
 ]
 
-const AGE_BANDS = [
-  { label: '0–3 วัน', test: (d) => d <= 3 },
-  { label: '4–7 วัน', test: (d) => d > 3 && d <= 7 },
-  { label: '8–14 วัน', test: (d) => d > 7 && d <= 14 },
-  { label: '15–30 วัน', test: (d) => d > 14 && d <= 30 },
-  { label: 'มากกว่า 30 วัน', test: (d) => d > 30 },
-]
-
-const SPEED_BANDS = [
-  { label: 'ไม่เกิน 60', test: (s) => s <= 60 },
-  { label: '61–80', test: (s) => s > 60 && s <= 80 },
-  { label: '81–90', test: (s) => s > 80 && s <= 90 },
-  { label: '91–100', test: (s) => s > 90 && s <= 100 },
-  { label: 'มากกว่า 100', test: (s) => s > 100 },
-]
-
 const pct = (n, total) => (total ? `${((n / total) * 100).toFixed(n / total < 0.1 ? 1 : 0)}%` : '0%')
-const ageDays = (r) => Math.max(0, Math.floor((Date.now() - r.start) / DAY))
 const isUrl = (s) => /^https?:\/\/\S+$/i.test(s)
 
 // Colors follow the value, not its rank in the current range.
@@ -442,6 +424,8 @@ export default function BehaviorDashboard() {
 
   const badRange = period === 'custom' && !range
   const det = DETAILS.find((d) => d.id === detail)
+  // Panel title -> its table on the Reports page, with this page's period, unit and the panel's choices.
+  const rep = (id, opts) => reportHref(id, period, custom, { unit, ...opts })
 
   return (
     <div className="stage scroll" ref={stage}>
@@ -459,6 +443,9 @@ export default function BehaviorDashboard() {
           <button type="button" className="icon-btn" onClick={load} disabled={busy} aria-label="โหลดข้อมูลใหม่" title="โหลดข้อมูลใหม่">
             <RefreshCw size={16} className={busy ? 'spin' : ''} />
           </button>
+          <a className="rep-btn" href={rep({ src: 'behavior' })} title="ดูข้อมูลของกล่องในหน้านี้เป็นตาราง และส่งออก Excel / CSV">
+            <Table2 size={15} /> รายงาน
+          </a>
           <label className="f unit-pick" title="หน่วยงาน">
             <Building2 size={15} />
             <select value={unit} onChange={(e) => setUnit(e.target.value)} aria-label="เลือกหน่วยงาน">
@@ -509,7 +496,7 @@ export default function BehaviorDashboard() {
             </div>
 
             <div className="dash-grid">
-              <Panel className="span-2" i={4} title="จำนวนบันทึกพฤติกรรมรายวัน"
+              <Panel className="span-2" i={4} href={rep('bh-daily')} title="จำนวนบันทึกพฤติกรรมรายวัน"
                 note={`${nf.format(data.rows.length)} รายการ · ${dShort(data.daily[0].date)} – ${dShort(data.daily.at(-1).date)}`}>
                 {data.rows.length ? (
                   <LineChart data={data.daily} animKey={animKey} format={times} integer
@@ -517,11 +504,11 @@ export default function BehaviorDashboard() {
                 ) : <Empty />}
               </Panel>
 
-              <Panel i={5} title="ระดับความเสี่ยง">
+              <Panel i={5} href={rep('bh-risk')} title="ระดับความเสี่ยง">
                 <Donut data={data.riskSlices} animKey={animKey} unit="รายการ" />
               </Panel>
 
-              <Panel className="span-3" i={6} title="สถิติรายเดือน"
+              <Panel className="span-3" i={6} href={rep('bh-monthly')} title="สถิติรายเดือน"
                 note="12 เดือนล่าสุด แยกตามการตอบกลับ · เดือนในช่วงที่เลือกแสดงสีเข้ม · คลิกแท่งเพื่อดูเดือนนั้น">
                 <MonthBars months={months} active={(i) => months[i].active} onPick={pickMonth}
                   format={times} animKey={`${state.at?.getTime()}:${unit}`} />
@@ -532,17 +519,17 @@ export default function BehaviorDashboard() {
                 </ul>
               </Panel>
 
-              <Panel className="span-2" i={7} title="การตอบกลับรายหน่วยงาน"
+              <Panel className="span-2" i={7} href={rep('bh-unit-response')} title="การตอบกลับรายหน่วยงาน"
                 note={unit ? `เฉพาะ ${unit}` : 'เรียงตามจำนวนที่รอตอบกลับ · คลิกเพื่อดูเฉพาะหน่วยงาน'}>
                 <UnitResponse key={animKey} units={data.units} onPick={pickUnit} />
               </Panel>
 
-              <Panel i={8} title="รอตอบกลับมานานเท่าไร" note={`${nf.format(data.waitingCount)} รายการที่ยังไม่มีใบ VR`}>
+              <Panel i={8} href={rep('bh-waiting-age')} title="รอตอบกลับมานานเท่าไร" note={`${nf.format(data.waitingCount)} รายการที่ยังไม่มีใบ VR`}>
                 <FixedBars key={animKey} bands={data.ageBands} total={data.waitingCount} unit="รายการ"
                   note="นับจากวันที่เกิดเหตุถึงวันนี้" empty="ตอบกลับครบทุกรายการแล้ว" />
               </Panel>
 
-              <Panel className="span-2" i={9} title="อันดับสูงสุด" note="จำนวนบันทึก (10 อันดับ)"
+              <Panel className="span-2" i={9} href={rep('bh-rank', { by: rank })} title="อันดับสูงสุด" note="จำนวนบันทึก (10 อันดับ)"
                 actions={(
                   <div className="seg-ctl small" role="radiogroup" aria-label="จัดอันดับตาม">
                     {RANKS.map((r) => (
@@ -554,11 +541,11 @@ export default function BehaviorDashboard() {
                 <RankBars key={rank + animKey} data={data.ranks[rank].slice(0, 10)} format={times} total={data.rows.length} />
               </Panel>
 
-              <Panel i={10} title="ประเภทพฤติกรรม" note="3 ประเภทที่พบบ่อยสุด">
+              <Panel i={10} href={rep('bh-behavior')} title="ประเภทพฤติกรรม" note="3 ประเภทที่พบบ่อยสุด">
                 <Donut data={data.behaviorSlices} animKey={animKey} unit="รายการ" />
               </Panel>
 
-              <Panel className="span-2" i={11} title="รายละเอียดความผิด"
+              <Panel className="span-2" i={11} href={rep('bh-detail', { by: detail })} title="รายละเอียดความผิด"
                 note={det.onlyDone ? 'เฉพาะรายการที่ตอบกลับแล้ว (10 อันดับ)' : '10 อันดับ'}
                 actions={(
                   <div className="seg-ctl small" role="radiogroup" aria-label="แสดงตาม">
@@ -572,21 +559,21 @@ export default function BehaviorDashboard() {
                   total={data.details[detail].total} />
               </Panel>
 
-              <Panel i={12} title="ความเร็วสูงสุด" note={`${nf.format(data.speedCount)} รายการที่มีความเร็ว`}>
+              <Panel i={12} href={rep('bh-speed')} title="ความเร็วสูงสุด" note={`${nf.format(data.speedCount)} รายการที่มีความเร็ว`}>
                 <FixedBars key={animKey} bands={data.speedBands} total={data.speedCount} unit="รายการ"
                   note="หน่วย กม./ชม." empty="ไม่มีข้อมูลความเร็ว" />
               </Panel>
 
               {data.hours.some(Boolean) && (
-                <Panel className="span-3" i={13} title="ช่วงเวลาที่เกิดเหตุ" note="รวมทุกวัน แยกตามชั่วโมง (แท่งสว่าง = ช่วงที่เกิดบ่อยสุด)">
+                <Panel className="span-3" i={13} href={rep('bh-hour')} title="ช่วงเวลาที่เกิดเหตุ" note="รวมทุกวัน แยกตามชั่วโมง (แท่งสว่าง = ช่วงที่เกิดบ่อยสุด)">
                   <HourBars key={animKey} counts={data.hours} format={times} />
                 </Panel>
               )}
 
-              {insights && <BehaviorInsights d={insights} compare={insights.compare} i0={14} />}
+              {insights && <BehaviorInsights d={insights} compare={insights.compare} i0={14} rep={rep} />}
 
               <div className="span-3" ref={tableRef}>
-                <Panel i={28} title="รายการบันทึกพฤติกรรม" note={unit ? `เฉพาะ ${unit} · เรียงจากล่าสุด` : 'เรียงจากล่าสุด (รอตอบกลับ: เรียงจากค้างนานสุด)'}
+                <Panel i={28} href={rep('bh-cases')} title="รายการบันทึกพฤติกรรม" note={unit ? `เฉพาะ ${unit} · เรียงจากล่าสุด` : 'เรียงจากล่าสุด (รอตอบกลับ: เรียงจากค้างนานสุด)'}
                   actions={unit && <button type="button" className="more" onClick={() => setUnit('')}>ดูทุกหน่วยงาน</button>}>
                   <BehaviorTable rows={data.rows} headers={state.headers} />
                 </Panel>

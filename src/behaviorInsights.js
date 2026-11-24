@@ -180,13 +180,15 @@ export function driverTimeline(allRecords, name) {
 const FATIGUE = /ง่วง|เมื่อยล้า|อ่อนเพลีย|หลับ|ขับรถต่อเนื่อง|พักไม่ครบ|จอดพักไม่ครบ/
 export const isFatigue = (r) => FATIGUE.test(`${r.offense} ${r.cause}`)
 
+export const fatigueKind = (r) => (/ขับรถต่อเนื่อง|พักไม่ครบ/.test(r.offense) ? 'ขับต่อเนื่องเกิน 4 ชม.'
+  : /ไม่ให้ความร่วมม/.test(r.offense) ? 'ง่วง/เมื่อยล้า และไม่ให้ความร่วมมือหยุดพัก'
+    : 'ง่วง/เมื่อยล้า แต่ให้ความร่วมมือหยุดพัก')
+
 export function fatigue(rows) {
   const list = rows.filter(isFatigue)
   const hours = Array(24).fill(0)
   for (const r of list) if (r.hasTime) hours[r.start.getHours()]++
-  const kinds = [...groupBy(list, (r) => (/ขับรถต่อเนื่อง|พักไม่ครบ/.test(r.offense) ? 'ขับต่อเนื่องเกิน 4 ชม.'
-    : /ไม่ให้ความร่วมม/.test(r.offense) ? 'ง่วง/เมื่อยล้า และไม่ให้ความร่วมมือหยุดพัก'
-      : 'ง่วง/เมื่อยล้า แต่ให้ความร่วมมือหยุดพัก'))]
+  const kinds = [...groupBy(list, fatigueKind)]
     .map(([name, l]) => ({ name, value: l.length })).sort((a, b) => b.value - a.value)
   const night = list.filter((r) => r.hasTime && (r.start.getHours() >= 0 && r.start.getHours() < 6)).length
   return { count: list.length, total: rows.length, hours, kinds, night, timed: list.filter((r) => r.hasTime).length }

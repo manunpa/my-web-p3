@@ -629,6 +629,8 @@ input[type=date],input[type=datetime-local],input[type=time],input[type=month]{m
 .panel-link:hover{color:var(--gold-text);text-decoration:underline;text-underline-offset:3px}
 .panel-link:hover .panel-link-ic,.panel-link:focus-visible .panel-link-ic{opacity:1}
 @media (hover:none){.panel-link-ic{opacity:.45}}
+/* wide tables scroll inside their panel instead of widening the page on phones */
+.dash.reports{min-width:0;width:100%}
 .rep-controls{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end;margin-bottom:14px}
 .rep-field{display:grid;gap:6px;font-size:12px;color:var(--muted)}
 .rep-field>span{font-weight:600}
