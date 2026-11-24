@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Search, RefreshCw, MapPin, Layers, Crosshair, X, Copy, Check, ExternalLink, AlertTriangle,
+  LocateFixed, Navigation,
 } from 'lucide-react'
-import { loadGeofences, cachedGeofences, googleMapsLink, parseCoords, OTHER_SUPPLIER_COLOR } from './mapsData'
+import {
+  loadGeofences, cachedGeofences, googleMapsLink, navLink, parseCoords, OTHER_SUPPLIER_COLOR,
+  distanceKm, nearestTo, formatDist,
+} from './mapsData'
+import { useMyLocation } from './myLocation'
 import LeafletMap from './LeafletMap'
 import GoogleMap, { preloadGoogleMaps } from './GoogleMap'
 
@@ -33,11 +38,19 @@ const store = {
   set: (k, v) => { try { localStorage.setItem(k, v) } catch { /* private mode */ } },
 }
 
-// Rough distance in km, good enough for sorting nearby points.
-const distKm = (a, b) => {
-  const x = (b.lng - a.lng) * Math.cos(((a.lat + b.lat) / 2) * Math.PI / 180)
-  const y = b.lat - a.lat
-  return Math.sqrt(x * x + y * y) * 111.32
+const distKm = distanceKm
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true } catch {
+    // fallback for browsers that block the clipboard API
+    const ta = document.createElement('textarea')
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
+    document.body.append(ta); ta.select()
+    let ok = false
+    try { ok = document.execCommand('copy') } catch { /* blocked */ }
+    ta.remove()
+    return ok
+  }
 }
 
 export default function MapsPage() {
@@ -70,6 +83,51 @@ export default function MapsPage() {
   }, [typedPin])
   useEffect(() => { if (pin) setSelected(null) }, [pin])
   const view = useRef({ lat: 13.6, lng: 100.9, zoom: 6 })
+
+  // short message at the bottom of the map
+  const [note, setNote] = useState(null)
+  const say = useCallback((text, ms = 4000) => setNote({ text, until: Date.now() + ms }), [])
+  useEffect(() => {
+    if (!note) return
+    const t = setTimeout(() => setNote(null), note.until - Date.now())
+    return () => clearTimeout(t)
+  }, [note])
+
+  // "my location": find once -> follow live -> off. While following, the map keeps me in the
+  // middle until the user drags it; then a "back to me" button appears.
+  const [focus, setFocus] = useState(null)
+  const [locked, setLocked] = useState(true)
+  const shownRef = useRef([])
+  const loc = useMyLocation({
+    onNote: say,
+    onFound: (f) => {
+      setQ(''); setPin(null); setSelected(null)
+      const near = nearestTo(f, shownRef.current, 5)
+      setFocus({ key: Date.now(), pts: [f, ...near.map((n) => n.p)] })
+      say((near[0] ? `ใกล้ที่สุด: ${near[0].p.name} (${formatDist(near[0].km)})` : 'พบตำแหน่งแล้ว')
+        + ` · แม่นยำ ±${Math.round(f.acc)} ม. — กดปุ่มอีกครั้งเพื่อติดตามแบบเรียลไทม์`, 6000)
+    },
+  })
+  const me = loc.me
+  const following = loc.mode === 'follow'
+  useEffect(() => { if (following) setLocked(true) }, [following])
+  useEffect(() => { if (selected) setLocked(false) }, [selected]) // looking at a station: stop pulling the map back
+  // typing a coordinate replaces my location
+  useEffect(() => { if (typedPin && me) loc.off() }, [typedPin]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // copy buttons inside map popups
+  useEffect(() => {
+    const onClick = async (e) => {
+      const btn = e.target.closest?.('.mpop-btn[data-copy]')
+      if (!btn) return
+      e.preventDefault()
+      const ok = await copyText(btn.dataset.copy)
+      say(ok ? `คัดลอกพิกัดแล้ว: ${btn.dataset.copy}` : 'คัดลอกไม่สำเร็จ ลองกดค้างที่พิกัดเพื่อคัดลอกเอง', 2500)
+      if (ok) { const old = btn.textContent; btn.textContent = '✓ คัดลอกแล้ว'; setTimeout(() => { btn.textContent = old }, 1500) }
+    }
+    document.addEventListener('click', onClick)
+    return () => document.removeEventListener('click', onClick)
+  }, [say])
 
   const load = useCallback(async () => {
     setBusy(true)
@@ -110,10 +168,15 @@ export default function MapsPage() {
 
   // Points drawn on the map: supplier toggles + search.
   const shown = useMemo(() => data.points.filter((p) => !hidden.has(p.supplier) && matches(p)), [data.points, hidden, matches])
+  shownRef.current = shown
+
+  // The 5 closest stations to my location (or the searched coordinate): dashed lines on the map.
+  const lineFrom = me ?? pin
+  const nearest = useMemo(() => (lineFrom ? nearestTo(lineFrom, shown, 5) : []), [lineFrom, shown])
 
   // Points listed in the sidebar: same, optionally only inside the visible map area (nearest first).
-  // With a searched coordinate, distances are measured from it instead of the map center.
-  const origin = pin ?? (inView ? center : null)
+  // With my location or a searched coordinate, distances are measured from it instead of the map center.
+  const origin = me ?? pin ?? (inView ? center : null)
   const listed = useMemo(() => {
     const inside = inView && bounds
       ? shown.filter((p) => p.lat >= bounds.south && p.lat <= bounds.north && p.lng >= bounds.west && p.lng <= bounds.east)
@@ -121,7 +184,7 @@ export default function MapsPage() {
     return origin ? [...inside].sort((a, b) => distKm(origin, a) - distKm(origin, b)) : inside
   }, [shown, inView, bounds, origin])
 
-  useEffect(() => setLimit(PAGE), [q, hidden, inView, pin])
+  useEffect(() => setLimit(PAGE), [q, hidden, inView, pin, !me]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onView = useCallback((v, b) => { view.current = v; setBounds(b); setCenter({ lat: v.lat, lng: v.lng }) }, [])
 
@@ -133,11 +196,17 @@ export default function MapsPage() {
   const only = (name) => setHidden(new Set(data.suppliers.map((s) => s.name).filter((s) => s !== name)))
 
   const copy = async (p) => {
-    try {
-      await navigator.clipboard.writeText(`${p.lat}, ${p.lng}`)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch { /* clipboard blocked */ }
+    if (!await copyText(`${p.lat}, ${p.lng}`)) { say('คัดลอกไม่สำเร็จ ลองกดค้างที่พิกัดเพื่อคัดลอกเอง', 2500); return }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  // tap the "nearest" bar: show that station (while following, stop pulling the map back to me)
+  const goNearest = (p) => { setLocked(false); setSelected(p) }
+
+  const mapProps = {
+    points: shown, colorOf, selected, onSelect: setSelected, type, view: view.current, onView, fitKey, pin,
+    me, nearest, following, locked: following && locked, onUnlock: () => setLocked(false), focus,
   }
 
   return (
@@ -235,12 +304,16 @@ export default function MapsPage() {
                 <a className="more" href={googleMapsLink(selected)} target="_blank" rel="noopener noreferrer">
                   <ExternalLink size={14} /> Google Maps
                 </a>
+                <a className="more" href={navLink(selected)} target="_blank" rel="noopener noreferrer">
+                  <Navigation size={14} /> นำทาง
+                </a>
               </div>
             </div>
           )}
 
           <p className="side-count muted">
-            {data.status === 'loading' ? 'กำลังโหลดข้อมูล…' : `${nf.format(listed.length)} รายการ${pin ? ' · เรียงจากใกล้พิกัดที่ค้นหา' : ''}`}
+            {data.status === 'loading' ? 'กำลังโหลดข้อมูล…'
+              : `${nf.format(listed.length)} รายการ${me ? ' · เรียงจากใกล้ตำแหน่งของฉัน' : pin ? ' · เรียงจากใกล้พิกัดที่ค้นหา' : ''}`}
           </p>
 
           <ul className="plist">
@@ -288,16 +361,37 @@ export default function MapsPage() {
           ) : (
             <>
               {/* Both maps stay alive once opened, so switching back and forth is instant. */}
-              {opened.has('osm') && (
-                <LeafletMap active={engine === 'osm'} points={shown} colorOf={colorOf} selected={selected}
-                  onSelect={setSelected} type={type} view={view.current} onView={onView} fitKey={fitKey} pin={pin} />
+              {opened.has('osm') && <LeafletMap active={engine === 'osm'} {...mapProps} />}
+              {opened.has('google') && <GoogleMap active={engine === 'google'} {...mapProps} />}
+
+              {me && nearest[0] && (
+                <button type="button" className={`near-bar${following ? ' following' : ''}`} onClick={() => goNearest(nearest[0].p)}
+                  title="ไปที่สถานีนี้">
+                  <span className="nb-dot" />
+                  <span className="nb-label">ใกล้สุด</span>
+                  <span className="nb-name">{nearest[0].p.name}</span>
+                  <span className="nb-dist">{formatDist(nearest[0].km)}</span>
+                </button>
               )}
-              {opened.has('google') && (
-                <GoogleMap active={engine === 'google'} points={shown} colorOf={colorOf} selected={selected}
-                  onSelect={setSelected} type={type} view={view.current} onView={onView} fitKey={fitKey} pin={pin} />
-              )}
+
+              <div className="map-tools">
+                {following && !locked && (
+                  <button type="button" className="loc-btn recenter" onClick={() => setLocked(true)}
+                    title="กลับมาที่ตำแหน่งของฉัน" aria-label="กลับมาที่ตำแหน่งของฉัน">
+                    <Navigation size={18} />
+                  </button>
+                )}
+                <button type="button" className={`loc-btn ${loc.mode}`} onClick={loc.click}
+                  aria-pressed={loc.mode === 'on' || following}
+                  title={loc.mode === 'follow' ? 'กำลังติดตามตำแหน่ง — กดเพื่อปิด'
+                    : loc.mode === 'on' ? 'กดเพื่อติดตามตำแหน่งแบบเรียลไทม์' : 'ตำแหน่งของฉัน'}
+                  aria-label="ตำแหน่งของฉัน">
+                  <LocateFixed size={19} />
+                </button>
+              </div>
             </>
           )}
+          {note && <div className="map-note" role="status">{note.text}</div>}
           {data.status === 'loading' && <div className="map-msg"><MapPin size={18} /> กำลังโหลดพิกัด…</div>}
           {data.error && data.status === 'ready' && <div className="map-toast">โหลดข้อมูลล่าสุดไม่สำเร็จ แสดงข้อมูลชุดก่อนหน้า</div>}
         </section>

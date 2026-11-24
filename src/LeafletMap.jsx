@@ -3,7 +3,8 @@ import L from './leafletGlobal'
 import 'leaflet.markercluster'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
-import { popupHtml, pinPopupHtml, PIN_SVG } from './mapsData'
+import { popupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist } from './mapsData'
+import { createGlide } from './myLocation'
 
 const TILES = {
   road: {
@@ -33,7 +34,13 @@ const clusterIcon = (cluster) => {
 
 // points: visible points. colorOf(supplier). selected: point or null. onSelect(point).
 // view: { lat, lng, zoom } to start from. onView(view, bounds) on every move.
-export default function LeafletMap({ points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin }) {
+// me: my GPS position or null. nearest: [{ p, km }] closest to `me` (or to `pin`).
+// following: follow mode is on; locked: keep me in the middle. onUnlock() when the user drags.
+// focus: { key, pts } -> zoom to show all pts.
+export default function LeafletMap({
+  points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
+  me, nearest, following, locked, onUnlock, focus,
+}) {
   const box = useRef(null)
   const map = useRef(null)
   const tiles = useRef(null)
@@ -41,8 +48,28 @@ export default function LeafletMap({ points, colorOf, selected, onSelect, type, 
   const markers = useRef(new WeakMap()) // point object -> marker
   const highlight = useRef(null)
   const pinMk = useRef(null)
-  const cb = useRef({ onSelect, onView, active })
-  cb.current = { onSelect, onView, active }
+  const meMk = useRef(null)
+  const accC = useRef(null)
+  const lines = useRef(null)
+  const pairs = useRef([]) // [{ line, label, to, i }]
+  const glide = useRef(null)
+  const quiet = useRef(false) // true while following moves the map: do not report every frame
+  const cursor = useRef(null)
+  const cb = useRef({})
+  cb.current = { onSelect, onView, active, locked, onUnlock }
+
+  // Distance labels sit on their line, measured in screen pixels from the start.
+  const placeLabels = (from) => {
+    const m = map.current
+    if (!m || m._animatingZoom) return
+    const a = m.latLngToContainerPoint(from)
+    for (const pr of pairs.current) {
+      const b = m.latLngToContainerPoint(pr.to)
+      const t = labelT(a.distanceTo(b), pr.i)
+      pr.label.setLatLng(m.containerPointToLatLng(a.add(b.subtract(a).multiplyBy(t))))
+    }
+  }
+  const lineStart = () => glide.current?.pos ?? pin
 
   // create the map once
   useEffect(() => {
@@ -55,18 +82,45 @@ export default function LeafletMap({ points, colorOf, selected, onSelect, type, 
       chunkedLoading: true, showCoverageOnHover: false, maxClusterRadius: 55,
       spiderfyOnMaxZoom: true, iconCreateFunction: clusterIcon,
     }).addTo(m)
+    lines.current = L.layerGroup().addTo(m)
     const report = () => {
-      if (!cb.current.active) return // a hidden map must not overwrite the shared view
+      if (!cb.current.active || quiet.current) return // a hidden map must not overwrite the shared view
       const c = m.getCenter(), b = m.getBounds()
       cb.current.onView({ lat: c.lat, lng: c.lng, zoom: m.getZoom() },
         { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() })
     }
     m.on('moveend', report)
+    m.on('dragstart', () => cb.current.onUnlock?.())
+    m.on('mousemove', (e) => { if (cursor.current) cursor.current.textContent = `${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}` })
+    m.on('mouseout', () => { if (cursor.current) cursor.current.textContent = '' })
+    let relayout = null
+    m.on('zoomend moveend resize', () => {
+      clearTimeout(relayout)
+      relayout = setTimeout(() => { const f = lineStart(); if (f) placeLabels([f.lat, f.lng]) }, 150)
+    })
     map.current = m
+
+    // every frame while the blue dot glides: move the dot, the lines, and (when locked) the map
+    glide.current = createGlide((pos, done) => {
+      const ll = [pos.lat, pos.lng]
+      meMk.current?.setLatLng(ll)
+      accC.current?.setLatLng(ll)
+      for (const pr of pairs.current) pr.line.setLatLngs([ll, pr.to])
+      placeLabels(ll)
+      if (cb.current.locked && cb.current.active && !m._animatingZoom) {
+        quiet.current = !done
+        m.panTo(ll, { animate: false })
+        quiet.current = false
+      }
+    })
+
     report()
     const ro = new ResizeObserver(() => m.invalidateSize())
     ro.observe(box.current)
-    return () => { ro.disconnect(); m.remove(); map.current = null; markers.current = new WeakMap() }
+    return () => {
+      ro.disconnect(); clearTimeout(relayout); glide.current.stop()
+      m.remove(); map.current = null; markers.current = new WeakMap()
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // base layer
@@ -108,6 +162,12 @@ export default function LeafletMap({ points, colorOf, selected, onSelect, type, 
     map.current.fitBounds(L.latLngBounds(points.map((p) => [p.lat, p.lng])), { padding: [30, 30] })
   }, [fitKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // zoom to show a set of points (my location + the nearest ones)
+  useEffect(() => {
+    if (!focus || !active) return
+    map.current.flyToBounds(L.latLngBounds(focus.pts.map((p) => [p.lat, p.lng])), { padding: [70, 70], maxZoom: 16, duration: 0.8 })
+  }, [focus]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // selected point: gold ring + popup
   useEffect(() => {
     highlight.current?.remove()
@@ -147,5 +207,73 @@ export default function LeafletMap({ points, colorOf, selected, onSelect, type, 
     return () => clearTimeout(t)
   }, [pin])
 
-  return <div className="map-canvas" ref={box} hidden={!active} />
+  // keep the pin popup's "nearest" line current
+  useEffect(() => { if (pin && pinMk.current) pinMk.current.setPopupContent(pinPopupHtml(pin, nearest[0])) }, [pin, nearest])
+
+  // my location: blue dot + accuracy circle, gliding to each new fix
+  useEffect(() => {
+    const m = map.current
+    if (!me) {
+      meMk.current?.remove(); accC.current?.remove()
+      meMk.current = accC.current = null
+      glide.current.stop()
+      return
+    }
+    if (!meMk.current) {
+      accC.current = L.circle([me.lat, me.lng], {
+        radius: me.acc, color: '#1a73e8', weight: 1, opacity: 0.5, fillColor: '#1a73e8', fillOpacity: 0.12, interactive: false,
+      }).addTo(m)
+      meMk.current = L.marker([me.lat, me.lng], {
+        zIndexOffset: 30000,
+        icon: L.divIcon({ className: '', html: '<div class="mypos"><span class="mypos-arrow"></span></div>', iconSize: [22, 22], iconAnchor: [11, 11] }),
+      }).addTo(m).bindPopup('', { className: 'dark-popup' })
+    }
+    accC.current.setRadius(me.acc)
+    meMk.current.setPopupContent(myPopupHtml(me, following, nearest[0]))
+    const el = meMk.current.getElement()?.querySelector('.mypos')
+    if (el) {
+      el.classList.toggle('moving', me.heading !== null)
+      if (me.heading !== null) el.style.setProperty('--hd', `${me.heading}deg`)
+    }
+    glide.current.set(me, following)
+  }, [me, following, nearest])
+
+  // dashed lines to the nearest points, with a distance label on each
+  useEffect(() => {
+    lines.current.clearLayers()
+    pairs.current = []
+    const f = lineStart()
+    if (!f) return
+    const from = [f.lat, f.lng]
+    const renderer = L.svg({ padding: 0.5 })
+    nearest.forEach(({ p, km }, i) => {
+      const s = nearStyle(i), to = [p.lat, p.lng]
+      const line = L.polyline([from, to], {
+        color: s.color, weight: s.weight, opacity: s.opacity, dashArray: '6 6', interactive: false,
+        renderer, className: `nearline ${s.cls}`,
+      }).addTo(lines.current)
+      const label = L.marker(from, {
+        icon: L.divIcon({ className: 'distlabel-wrap', html: `<span class="distlabel ${s.cls}">${formatDist(km)}</span>`, iconSize: null }),
+        interactive: false, keyboard: false, zIndexOffset: 900 - i * 20,
+      }).addTo(lines.current)
+      pairs.current.push({ line, label, to, i })
+    })
+    // the red and yellow lines on top of the blue ones
+    pairs.current[1]?.line.bringToFront()
+    pairs.current[0]?.line.bringToFront()
+    placeLabels(from)
+  }, [nearest, pin, me]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // pressing "back to me" while following: glide the map back
+  useEffect(() => {
+    const p = glide.current?.pos
+    if (locked && active && p) map.current.panTo([p.lat, p.lng])
+  }, [locked]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="map-canvas" hidden={!active}>
+      <div ref={box} className="map-fill" />
+      <div ref={cursor} className="cursor-coords" aria-hidden="true" />
+    </div>
+  )
 }

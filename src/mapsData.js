@@ -122,10 +122,80 @@ export const PIN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="30" heigh
   + '<path d="M15 1C7.3 1 1 7.2 1 14.9 1 25.3 15 39 15 39s14-13.7 14-24.1C29 7.2 22.7 1 15 1z" fill="#ef4444" stroke="#fff" stroke-width="2"/>'
   + '<circle cx="15" cy="15" r="5.5" fill="#fff"/></svg>'
 
-export function pinPopupHtml(p) {
+// Straight-line distance on the earth's surface in km (haversine).
+export function distanceKm(a, b) {
+  const r = (d) => d * Math.PI / 180
+  const dLat = r(b.lat - a.lat), dLng = r(b.lng - a.lng)
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLng / 2) ** 2
+  return 2 * 6371 * Math.asin(Math.sqrt(h))
+}
+
+export const formatDist = (km) => (km < 1
+  ? `${Math.round(km * 1000).toLocaleString('th-TH')} ม.`
+  : `${km.toLocaleString('th-TH', { minimumFractionDigits: km < 10 ? 2 : 1, maximumFractionDigits: km < 10 ? 2 : 1 })} กม.`)
+
+// The n points closest to `from`, nearest first: [{ p, km }].
+export function nearestTo(from, points, n = 5) {
+  const best = []
+  for (const p of points) {
+    const km = distanceKm(from, p)
+    if (best.length < n || km < best[best.length - 1].km) {
+      best.push({ p, km })
+      best.sort((a, b) => a.km - b.km)
+      if (best.length > n) best.pop()
+    }
+  }
+  return best
+}
+
+// Dashed lines to the nearest points: red = 1st, yellow = 2nd, blue = the rest.
+const NEAR_STYLE = [
+  { color: '#e05260', weight: 3, opacity: 0.9, cls: 'first', text: '#fff' },
+  { color: '#f2b705', weight: 3, opacity: 0.95, cls: 'second', text: '#3d2e00' },
+  { color: '#4776ff', weight: 2, opacity: 0.55, cls: '', text: '#4776ff' },
+]
+export const nearStyle = (i) => NEAR_STYLE[Math.min(i, 2)]
+
+// Where along a line (0..1) to put its distance label. Long lines on screen: a fixed number of
+// pixels from the start, so labels stay close to you at any zoom; each rank sits a bit further
+// out so labels of lines going the same way do not cover each other. Short lines: a fraction.
+const LABEL_PX = [70, 105, 140, 175, 210]
+const LABEL_FRAC = [0.5, 0.75, 0.3, 0.9, 0.6]
+export function labelT(lenPx, i) {
+  if (lenPx < 1) return 0
+  if (lenPx > 140) return Math.min(0.9, LABEL_PX[i % 5] / lenPx)
+  return Math.min(1, Math.max(LABEL_FRAC[i % 5], 28 / lenPx)) // never under the blue dot
+}
+
+export const navLink = (p) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`
+
+// Copy / navigate buttons for popups. MapsPage handles clicks on [data-copy].
+function popupActions(p) {
+  const c = `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`
+  return `<div class="mpop-actions">
+    <button type="button" class="mpop-btn" data-copy="${c}">⧉ คัดลอกพิกัด</button>
+    <a class="mpop-btn primary" href="${navLink(p)}" target="_blank" rel="noopener">➤ นำทาง</a>
+  </div>`
+}
+
+const nearLine = (near) => (near ? `<span>ใกล้สุด: <b>${escapeHtml(near.p.name)}</b> · ${formatDist(near.km)}</span>` : '')
+
+export function pinPopupHtml(p, near) {
   return `<div class="mpop">
     <div class="mpop-sup">พิกัดที่ค้นหา</div>
     <code>${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</code>
+    ${nearLine(near)}
+    ${popupActions(p)}
+  </div>`
+}
+
+export function myPopupHtml(me, following, near) {
+  return `<div class="mpop">
+    <div class="mpop-sup">ตำแหน่งของฉัน${following ? ' (ติดตามอยู่)' : ''}</div>
+    <code>${me.lat.toFixed(6)}, ${me.lng.toFixed(6)}</code>
+    <span>ความแม่นยำ ±${Math.round(me.acc).toLocaleString('th-TH')} ม.</span>
+    ${nearLine(near)}
+    ${popupActions(me)}
   </div>`
 }
 
@@ -136,5 +206,6 @@ export function popupHtml(p, color) {
     <strong>${escapeHtml(p.name)}</strong>
     <code>${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</code>
     <a href="${googleMapsLink(p)}" target="_blank" rel="noopener">เปิดใน Google Maps ↗</a>
+    ${popupActions(p)}
   </div>`
 }

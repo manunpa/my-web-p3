@@ -1,7 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import Supercluster from 'supercluster'
-import { GOOGLE_MAPS_KEY, popupHtml, pinPopupHtml, PIN_SVG } from './mapsData'
+import { GOOGLE_MAPS_KEY, popupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist } from './mapsData'
 import { GOOGLE_MAPS_DAILY_LIMIT, takeGoogleMapLoad, consumeGoogleMapLoad } from './mapsQuota'
+import { createGlide } from './myLocation'
+
+// Distance label drawn as a small SVG pill (Google marker labels cannot have a background).
+const distIcon = (gm, text, i) => {
+  const s = nearStyle(i)
+  const w = Math.round(text.length * 6.6 + 14), h = 18
+  const bg = i < 2 ? s.color : '#ffffff'
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">`
+    + `<rect x=".5" y=".5" width="${w - 1}" height="${h - 1}" rx="8" fill="${bg}" stroke="${s.color}"/>`
+    + `<text x="${w / 2}" y="13" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="${s.text}">${text}</text></svg>`
+  return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg), scaledSize: new gm.Size(w, h), anchor: new gm.Point(w / 2, h / 2) }
+}
+
+const myIcon = (gm, heading) => (heading === null
+  ? { path: gm.SymbolPath.CIRCLE, scale: 8, fillColor: '#1a73e8', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3 }
+  : { path: gm.SymbolPath.FORWARD_CLOSED_ARROW, scale: 6, rotation: heading, fillColor: '#1a73e8', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 })
 
 /* ---------- load the Google Maps script once ---------- */
 
@@ -60,7 +76,10 @@ const clusterSize = (n) => (n < 10 ? 34 : n < 100 ? 40 : n < 1000 ? 48 : 56)
  * clustered with Supercluster and only the clusters / points inside the visible area are
  * drawn - usually a few hundred markers at most. Markers are re-used between redraws.
  */
-export default function GoogleMap({ points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin }) {
+export default function GoogleMap({
+  points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
+  me, nearest, following, locked, onUnlock, focus,
+}) {
   const box = useRef(null)
   const map = useRef(null)
   const index = useRef(null)
@@ -69,10 +88,29 @@ export default function GoogleMap({ points, colorOf, selected, onSelect, type, v
   const highlight = useRef(null)
   const pinMk = useRef(null)
   const info = useRef(null)
+  const meMk = useRef(null)
+  const accC = useRef(null)
+  const pairs = useRef([]) // [{ line, label, to, i }]
+  const glide = useRef(null)
+  const cursor = useRef(null)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState(authFailed ? 'auth' : null)
-  const live = useRef({ onSelect, onView, colorOf, active })
-  live.current = { onSelect, onView, colorOf, active }
+  const live = useRef({})
+  live.current = { onSelect, onView, colorOf, active, locked, onUnlock, me, following, nearest }
+
+  // Distance labels sit on their line, measured in screen pixels from the start.
+  const placeLabels = (from) => {
+    const m = map.current, proj = m?.getProjection()
+    if (!proj) return
+    const s = 2 ** m.getZoom(), gm = window.google.maps
+    const a = proj.fromLatLngToPoint(from)
+    for (const pr of pairs.current) {
+      const b = proj.fromLatLngToPoint(pr.to)
+      const t = labelT(Math.hypot(b.x - a.x, b.y - a.y) * s, pr.i)
+      pr.label.setPosition(proj.fromPointToLatLng(new gm.Point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)))
+    }
+  }
+  const lineStart = () => glide.current?.pos ?? pin
 
   // Draw the clusters / points for the current view.
   const redraw = () => {
@@ -149,8 +187,20 @@ export default function GoogleMap({ points, colorOf, selected, onSelect, type, v
         live.current.onView({ lat: c.lat(), lng: c.lng(), zoom: m.getZoom() },
           { south: sw.lat(), west: sw.lng(), north: ne.lat(), east: ne.lng() })
       })
+      m.addListener('dragstart', () => live.current.onUnlock?.())
+      m.addListener('mousemove', (e) => { if (cursor.current) cursor.current.textContent = `${e.latLng.lat().toFixed(5)}, ${e.latLng.lng().toFixed(5)}` })
+      m.addListener('mouseout', () => { if (cursor.current) cursor.current.textContent = '' })
+      m.addListener('zoom_changed', () => { const f = lineStart(); if (f) placeLabels(f) })
       info.current = new gm.InfoWindow()
       map.current = m
+      // every frame while the blue dot glides: move the dot, the lines, and (when locked) the map
+      glide.current = createGlide((pos) => {
+        meMk.current?.setPosition(pos)
+        accC.current?.setCenter(pos)
+        for (const pr of pairs.current) pr.line.setPath([pos, pr.to])
+        placeLabels(pos)
+        if (live.current.locked && live.current.active) m.setCenter(pos)
+      })
       setReady(true)
     }).catch((e) => alive && setError(e.code === 'permission-denied' || e.code === 'unavailable'
       ? 'ตรวจสอบโควต้า Google Maps ไม่สำเร็จ จึงยังไม่โหลดแผนที่ (เพื่อไม่ให้เกิดค่าใช้จ่าย) ลองใหม่ภายหลัง หรือใช้ OpenStreetMap'
@@ -159,8 +209,12 @@ export default function GoogleMap({ points, colorOf, selected, onSelect, type, v
       alive = false
       authListeners.delete(onAuth)
       clearDrawn()
+      glide.current?.stop()
       highlight.current?.setMap(null)
       pinMk.current?.setMap(null)
+      meMk.current?.setMap(null)
+      accC.current?.setMap(null)
+      pairs.current.forEach((pr) => { pr.line.setMap(null); pr.label.setMap(null) })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -227,7 +281,7 @@ export default function GoogleMap({ points, colorOf, selected, onSelect, type, v
       icon: { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(PIN_SVG), scaledSize: new gm.Size(30, 40), anchor: new gm.Point(15, 39) },
     })
     pinMk.current.addListener('click', () => {
-      info.current.setContent(pinPopupHtml(pin))
+      info.current.setContent(pinPopupHtml(pin, live.current.nearest[0]))
       info.current.open({ map: map.current, anchor: pinMk.current, shouldFocus: false })
     })
     if (!active) return
@@ -237,9 +291,73 @@ export default function GoogleMap({ points, colorOf, selected, onSelect, type, v
     info.current.open({ map: map.current, anchor: pinMk.current, shouldFocus: false })
   }, [ready, pin]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // zoom to show a set of points (my location + the nearest ones)
+  useEffect(() => {
+    if (!ready || !focus || !active) return
+    const gm = window.google.maps, m = map.current
+    const b = new gm.LatLngBounds()
+    focus.pts.forEach((p) => b.extend({ lat: p.lat, lng: p.lng }))
+    m.fitBounds(b, 70)
+    gm.event.addListenerOnce(m, 'idle', () => { if (m.getZoom() > 16) m.setZoom(16) })
+  }, [ready, focus]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // my location: blue dot (an arrow while driving) + accuracy circle, gliding to each new fix
+  useEffect(() => {
+    if (!ready) return
+    const gm = window.google.maps
+    if (!me) {
+      meMk.current?.setMap(null); accC.current?.setMap(null)
+      meMk.current = accC.current = null
+      glide.current.stop()
+      return
+    }
+    if (!meMk.current) {
+      accC.current = new gm.Circle({
+        map: map.current, center: me, radius: me.acc, clickable: false,
+        strokeColor: '#1a73e8', strokeOpacity: 0.5, strokeWeight: 1, fillColor: '#1a73e8', fillOpacity: 0.12,
+      })
+      meMk.current = new gm.Marker({ map: map.current, position: me, zIndex: 200000 })
+      meMk.current.addListener('click', () => {
+        const l = live.current
+        info.current.setContent(myPopupHtml(l.me, l.following, l.nearest[0]))
+        info.current.open({ map: map.current, anchor: meMk.current, shouldFocus: false })
+      })
+    }
+    meMk.current.setIcon(myIcon(gm, me.heading))
+    accC.current.setRadius(me.acc)
+    glide.current.set(me, following)
+  }, [ready, me, following])
+
+  // dashed lines to the nearest points, with a distance label on each
+  useEffect(() => {
+    if (!ready) return
+    const gm = window.google.maps
+    pairs.current.forEach((pr) => { pr.line.setMap(null); pr.label.setMap(null) })
+    pairs.current = []
+    const from = lineStart()
+    if (!from) return
+    nearest.forEach(({ p, km }, i) => {
+      const s = nearStyle(i), to = { lat: p.lat, lng: p.lng }
+      const line = new gm.Polyline({
+        map: map.current, path: [from, to], clickable: false, strokeOpacity: 0, zIndex: 50 - i,
+        icons: [{ icon: { path: 'M 0,-1 0,1', strokeColor: s.color, strokeOpacity: s.opacity, scale: s.weight }, offset: '0', repeat: '12px' }],
+      })
+      const label = new gm.Marker({ map: map.current, position: from, clickable: false, zIndex: 150000 - i, icon: distIcon(gm, formatDist(km), i) })
+      pairs.current.push({ line, label, to, i })
+    })
+    placeLabels(from)
+  }, [ready, nearest, pin, me]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // pressing "back to me" while following: move the map back
+  useEffect(() => {
+    const p = glide.current?.pos
+    if (ready && locked && active && p) map.current.panTo(p)
+  }, [ready, locked]) // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="map-canvas" hidden={!active}>
       <div ref={box} className="map-fill" />
+      <div ref={cursor} className="cursor-coords" aria-hidden="true" />
       {!ready && !error && <div className="map-msg">กำลังโหลด Google Maps…</div>}
       {error && (
         <div className="map-msg err">
