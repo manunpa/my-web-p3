@@ -1,12 +1,14 @@
-// "Calculate the times" mode of the Plan Converter.
+// "Calculate the times" mode of the Plan Converter. Same rules as PlanCheck (SC Carrier), which
+// reads the plan's "วัน/เวลา ที่ต้องออกเดินทาง" as the time the truck leaves its home unit:
 //
-// For each trip, from the first drop's arrival time and distance:
-//   leave the depot (วัน/เวลา ที่ต้องออกเดินทาง) = arrive at the customer − distance ÷ speed
-//   start work (เวลาที่ต้องมาเริ่มงาน)           = arrive at the depot = leave the depot − G2G of that depot
-//   leave the home unit (shown only)          = start work − run time unit → depot
-// A trip whose first drop has no distance keeps the plan's own times (with a note).
+//   leave the depot  = arrive at the first drop − distance ÷ speed (rounded to the minute)
+//   arrive at depot  = leave the depot − G2G of that depot          -> เวลาที่ต้องมาเริ่มงาน
+//   leave home unit  = arrive at depot − run time unit → depot     -> วัน/เวลา ที่ต้องออกเดินทาง
+// When the unit is the depot (BPK โหลดเก็บ) or the run time is not known, leaving the unit is
+// leaving the depot, and start work = departure − G2G (30 min when the depot has none).
+// A trip whose first drop has no distance keeps the plan's departure (= leaving the unit) and the
+// rest follows forward from it, as PlanCheck does.
 //
-// Same rules as PlanCheck (SC Carrier) when a plan has no departure time.
 // The values below are a copy of PlanCheck's settings screens (คลัง / เวลาโหลด G2G, เวลาวิ่ง หน่วยงาน → คลัง,
 // รถ / Fleet) as of 24/11/2569. Change them here when those screens change.
 
@@ -97,11 +99,9 @@ const minOfDay = (d) => d.getHours() * 60 + d.getMinutes()
 const inWindow = (d, [a, b]) => { const x = minOfDay(d); return x >= hmToMin(a) && x < hmToMin(b) }
 
 // One trip: `rows` are its rows' cells (first drop first), after edits and the distance fill.
-// `fileUnit` is the home unit guessed from the file, used when a vehicle belongs to two units.
-// `fixedDepart`: the departure cell was typed in the table, so it is used as is.
-// Like PlanCheck, start work always follows the departure (departure − G2G), also when the
-// departure comes from the plan because the first drop has no distance.
-// Returns { depart, start, departFromPlan, notes, warns, drops } or { keep: true, notes, ... }.
+// `fileUnit` is the home unit set for the file (คลังต้นทาง ถ้าในไฟล์ไม่มี), used when a vehicle belongs
+// to two units. `fixedDepart`: the departure cell was typed in the table, so it is used as is.
+// Returns { depart, start, departFromPlan, notes, warns, drops } or { keep: true, notes, warns, drops }.
 export function calcTrip(rows, fileUnit, fixedDepart = false) {
   const first = rows[0]
   const notes = []
@@ -116,65 +116,78 @@ export function calcTrip(rows, fileUnit, fixedDepart = false) {
       : first[9] ? `ช่องทะเบียนเป็น "${first[9]}" ไม่ใช่ทะเบียน คิดแบบหัวลาก` : 'ไม่มีทะเบียน คิดแบบหัวลาก')
   }
   const speed = SPEED[type]
-  const planDepart = parseCell(first[7])
-  let depart
-  let departFromPlan = false
-  if (fixedDepart && planDepart) {
-    depart = planDepart
-    departFromPlan = true
-    notes.push('ใช้เวลาออกที่พิมพ์ไว้')
-  } else if (arrive && km > 0) {
-    // Run time rounded to the minute, as PlanCheck does (e.g. 125 กม. สิบล้อ = 2:22, due 06:00 -> 03:38).
-    const runMin = Math.round((km / speed) * 60)
-    depart = new Date(arrive.getTime() - runMin * MIN)
-    notes.push(`${TYPE_LABEL[type]} ${speed} กม./ชม. · ${km} กม. ≈ ${dur(runMin)} ชม.`)
-  } else if (planDepart) {
-    depart = planDepart
-    departFromPlan = true
-    notes.push(`${arrive ? 'ดรอปแรกไม่มีระยะทาง' : 'ไม่มีเวลาถึงลูกค้า'} · ใช้เวลาออกจากแผน`)
-  } else {
-    return { keep: true, notes: [...notes, `${arrive ? 'ดรอปแรกไม่มีระยะทาง' : 'ไม่มีเวลาถึงลูกค้า'} และแผนไม่มีเวลาออก · PlanCheck จะคำนวณเองตอนนำเข้าไม่ได้เช่นกัน`], warns, drops }
-  }
   const dk = depotKey(first[3])
   const depot = dk ? DEPOTS[dk] : null
   const g2g = depot?.g2g?.[type] ?? null
-  const start = new Date(depart.getTime() - (g2g ?? NO_G2G_MIN) * MIN)
+  const load = g2g ?? NO_G2G_MIN
+
+  // Home unit and the run to the depot. None when the truck loads at its own unit (BPK).
+  const homes = veh?.units ?? (fileUnit ? [fileUnit] : [])
+  const atHome = !!dk && (homes.includes(dk) || fileUnit === dk)
+  const withRoute = atHome ? [] : homes.filter((u) => route(u, dk, type))
+  const unit = withRoute.includes(fileUnit) ? fileUnit : withRoute[0] ?? null
+  const run = unit ? route(unit, dk, type) : null
+
   if (g2g) notes.push(`G2G ${dk} ${dur(g2g)}`)
   else if (depot) notes.push(`${dk} ${depot.note || 'ไม่มีค่า G2G'} · เริ่มงานก่อนออก ${NO_G2G_MIN} นาที`)
   else if (UNITS.includes(dk)) warns.push(`${dk} เป็นหน่วยงาน ไม่ใช่คลัง ยังไม่รู้คลังที่โหลด · ใช้เริ่มงานก่อนออก ${NO_G2G_MIN} นาที`)
   else notes.push(`${first[3] ? `ไม่รู้จักคลัง "${first[3]}"` : 'ไม่มีคลังที่โหลด'} · เริ่มงานก่อนออก ${NO_G2G_MIN} นาที`)
-
-  // Leaving the home unit, when the depot is elsewhere and the run time is known.
-  if (dk && veh) {
-    const units = veh.units.filter((u) => u !== dk && route(u, dk, type))
-    const unit = units.includes(fileUnit) ? fileUnit : units[0]
-    if (unit && !veh.units.includes(dk)) {
-      const r = route(unit, dk, type)
-      notes.push(`ออกจาก ${unit} ${hm(new Date(start.getTime() - r.min * MIN))} (วิ่ง ${dur(r.min)})`)
-    }
+  if (depot && !atHome && !run) {
+    warns.push(`ไม่รู้เวลาวิ่งจากหน่วยงาน${homes.length ? ` (${homes.join('/')})` : ''} ไป ${dk} · เวลาออกเดินทางเป็นเวลาออกจากคลัง ควรตรวจก่อนนำเข้า`)
   }
+
+  const planDepart = parseCell(first[7])
+  let leaveUnit, atDepot, leaveDepot
+  let departFromPlan = false
+  if (!(fixedDepart && planDepart) && arrive && km > 0) {
+    // Backwards from the customer.
+    const runMin = Math.round((km / speed) * 60)
+    leaveDepot = new Date(arrive.getTime() - runMin * MIN)
+    atDepot = new Date(leaveDepot.getTime() - load * MIN)
+    leaveUnit = run ? new Date(atDepot.getTime() - run.min * MIN) : leaveDepot
+    notes.unshift(`${TYPE_LABEL[type]} ${speed} กม./ชม. · ${km} กม. ≈ ${dur(runMin)} ชม.`)
+  } else if (planDepart) {
+    // Forwards from the plan's departure, which is leaving the home unit.
+    departFromPlan = true
+    leaveUnit = planDepart
+    if (run) {
+      atDepot = new Date(leaveUnit.getTime() + run.min * MIN)
+      leaveDepot = new Date(atDepot.getTime() + load * MIN)
+    } else {
+      leaveDepot = leaveUnit
+      atDepot = new Date(leaveDepot.getTime() - load * MIN)
+    }
+    notes.unshift(fixedDepart ? 'ใช้เวลาออกที่พิมพ์ไว้' : `${arrive ? 'ดรอปแรกไม่มีระยะทาง' : 'ไม่มีเวลาถึงลูกค้า'} · ใช้เวลาออกจากแผน`)
+  } else {
+    return { keep: true, notes: [...notes, `${arrive ? 'ดรอปแรกไม่มีระยะทาง' : 'ไม่มีเวลาถึงลูกค้า'} และแผนไม่มีเวลาออก · คำนวณไม่ได้`], warns, drops }
+  }
+
+  // The chain, like PlanCheck's: ออกจากหน่วยงาน → ถึงคลัง → โหลด → ออกจากคลัง.
+  notes.push(run
+    ? `ออกจาก ${unit} ${hm(leaveUnit)} → ถึง ${dk} ${hm(atDepot)} (วิ่ง ${dur(run.min)}) → โหลด ${dur(load)} → ออกจากคลัง ${hm(leaveDepot)}`
+    : `เริ่มงาน ${hm(atDepot)} → ออก${dk ? ` ${dk}` : ''} ${hm(leaveDepot)}`)
 
   // Depot hours and no-driving windows.
   if (depot?.open && depot.close !== '24:00') {
     const from = Math.max(hmToMin(depot.open), depot.count ? hmToMin(depot.count) : 0)
-    if (minOfDay(start) < from) {
-      const ready = new Date(start); ready.setHours(0, from + (g2g ?? 0), 0, 0)
-      warns.push(`เข้าคลังก่อนเริ่มโหลด (${depot.count || depot.open}) ออกได้จริงราว ${hm(ready)} อาจไปไม่ทัน`)
+    if (minOfDay(atDepot) < from) {
+      const ready = new Date(atDepot); ready.setHours(0, from + load, 0, 0)
+      warns.push(`ถึงคลังก่อนเริ่มโหลด (${depot.count || depot.open}) ออกจากคลังได้จริงราว ${hm(ready)} อาจไปไม่ทัน`)
     }
-    if (depot.close && minOfDay(depart) > hmToMin(depot.close)) warns.push(`โหลดเสร็จหลังคลังปิด (${depot.close})`)
+    if (depot.close && minOfDay(leaveDepot) > hmToMin(depot.close)) warns.push(`โหลดเสร็จหลังคลังปิด (${depot.close})`)
   }
-  for (const w of depot?.noDrive || []) if (inWindow(depart, w)) warns.push(`ออกช่วงห้ามเดินรถ ${w[0]}-${w[1]}`)
-  if (arrive && start.toDateString() !== arrive.toDateString()) notes.push(`เริ่มงานวันก่อนหน้า (${fmtCell(start).slice(0, 10)})`)
+  for (const w of depot?.noDrive || []) if (inWindow(leaveDepot, w)) warns.push(`ออกจากคลังช่วงห้ามเดินรถ ${w[0]}-${w[1]}`)
+  if (arrive && leaveUnit.toDateString() !== arrive.toDateString()) notes.push(`ออกเดินทางวันก่อนหน้า (${fmtCell(leaveUnit).slice(0, 10)})`)
 
   // Later drops: only checked, when they have a distance and a time.
   for (let i = 1; i < rows.length; i++) {
     const t = parseCell(rows[i][5])
     const d = Number(rows[i][6])
     if (!t || !(d > 0)) continue
-    const soonest = new Date(depart.getTime() + (d / speed) * 60 * MIN)
-    if (t < soonest) drops[i] = `ดรอปนี้อาจไม่ทัน: ออก ${hm(depart)} ไป ${d} กม. ถึงเร็วสุดราว ${hm(soonest)}`
+    const soonest = new Date(leaveDepot.getTime() + (d / speed) * 60 * MIN)
+    if (t < soonest) drops[i] = `ดรอปนี้อาจไม่ทัน: ออกจากคลัง ${hm(leaveDepot)} ไป ${d} กม. ถึงเร็วสุดราว ${hm(soonest)}`
   }
 
-  if (!departFromPlan && planDepart && Math.abs(planDepart - depart) >= 30 * MIN) notes.push(`แผนเดิมออก ${hm(planDepart)}`)
-  return { depart, start, departFromPlan, notes, warns, drops }
+  if (!departFromPlan && planDepart && Math.abs(planDepart - leaveUnit) >= 30 * MIN) notes.push(`แผนเดิมออก ${hm(planDepart)}`)
+  return { depart: leaveUnit, start: atDepot, leaveDepot, departFromPlan, notes, warns, drops }
 }
