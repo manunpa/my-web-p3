@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Search, RefreshCw, MapPin, Layers, Crosshair, X, Copy, Check, ExternalLink, AlertTriangle,
   LocateFixed, Navigation, Fuel, Store, MapPinned, Car, Bus, Bike, Eye, CloudRain, Play, Pause, Anchor, Wind, Route,
+  Map as MapIcon, Moon, Satellite, Globe, Mountain,
 } from 'lucide-react'
 import { loadOffshore, cachedOffshore, DMF_CREDIT, PLATFORM_GROUP, PLATFORM_COLOR } from './offshoreData'
 import { loadRainFrames, rainTimeLabel, lagLabel } from './rainRadar'
@@ -30,17 +31,17 @@ const ENGINES = [
 
 const TYPES = {
   osm: [
-    { id: 'road', label: 'แผนที่' },
-    { id: 'dark', label: 'แผนที่มืด' },
-    { id: 'satellite', label: 'ดาวเทียม' },
-    { id: 'terrain', label: 'ภูมิประเทศ' },
+    { id: 'road', label: 'แผนที่', Icon: MapIcon },
+    { id: 'dark', label: 'แผนที่มืด', Icon: Moon },
+    { id: 'satellite', label: 'ดาวเทียม', Icon: Satellite },
+    { id: 'terrain', label: 'ภูมิประเทศ', Icon: Mountain },
   ],
   google: [
-    { id: 'road', label: 'แผนที่' },
-    { id: 'dark', label: 'แผนที่มืด' },
-    { id: 'satellite', label: 'ดาวเทียม' },
-    { id: 'hybrid', label: 'ไฮบริด' },
-    { id: 'terrain', label: 'ภูมิประเทศ' },
+    { id: 'road', label: 'แผนที่', Icon: MapIcon },
+    { id: 'dark', label: 'แผนที่มืด', Icon: Moon },
+    { id: 'satellite', label: 'ดาวเทียม', Icon: Satellite },
+    { id: 'hybrid', label: 'ไฮบริด', Icon: Globe },
+    { id: 'terrain', label: 'ภูมิประเทศ', Icon: Mountain },
   ],
 }
 
@@ -720,8 +721,8 @@ export default function MapsPage() {
           <div className="seg-ctl" role="radiogroup" aria-label="รูปแบบแผนที่">
             <Layers size={14} className="seg-ic" aria-hidden="true" />
             {TYPES[engine].map((t) => (
-              <button key={t.id} type="button" role="radio" aria-checked={type === t.id}
-                className={type === t.id ? 'on' : ''} onClick={() => setType(t.id)}>{t.label}</button>
+              <button key={t.id} type="button" role="radio" aria-checked={type === t.id} title={t.label} aria-label={t.label}
+                className={`ic${type === t.id ? ' on' : ''}`} onClick={() => setType(t.id)}><t.Icon size={16} /></button>
             ))}
           </div>
           {engine === 'google' && (
