@@ -679,3 +679,7 @@ input[type=date],input[type=datetime-local],input[type=time],input[type=month]{m
 .conv-table th.geo-col small{display:block;font-weight:400;font-size:10.5px}
 .conv-table td.geo-col span:not(.muted){color:var(--text)}
 .conv-table td.geo-col .close{color:#ea580c}
+/* Plan converter: saving the exported plan to the archive sheet */
+.conv-archive{display:flex;align-items:center;gap:6px;width:100%;margin:6px 0 0;font-size:12.5px;color:var(--muted)}
+.conv-archive.done{color:var(--ok)}
+.conv-archive.error{color:var(--err)}

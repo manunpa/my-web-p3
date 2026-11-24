@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Upload, FileSpreadsheet, Download, X, AlertTriangle, Loader2, Plus, Trash2, RotateCcw, Route, RefreshCw,
+  CheckCircle2,
 } from 'lucide-react'
 import { loadDistances, findMatch, findGeofence } from './distanceData'
+import { archivePlan, PLAN_ARCHIVE_URL } from './planArchive'
 import {
   OUT_HEAD, readBook, readSheet, pickSheet, sheetDate, guessDepot, convertSheet, toRows, numberRows,
   writeXlsx, fmtYmd, toInputDate, fromInputDate,
@@ -31,6 +33,7 @@ export default function DocumentsPage() {
   const [drag, setDrag] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [archive, setArchive] = useState({ status: 'idle' }) // saving the exported plan to the archive sheet
   const input = useRef(null)
 
   const update = (id, patch) => setFiles((fs) => fs.map((f) => (f.id === id ? { ...f, ...patch } : f)))
@@ -168,10 +171,24 @@ export default function DocumentsPage() {
       setTimeout(() => URL.revokeObjectURL(a.href), 1000)
     } catch (e) {
       setError(`สร้างไฟล์ไม่ได้: ${e.message}`)
-    } finally {
       setSaving(false)
+      return
     }
+    // Same button also stores the same plan in the archive sheet. The file is already downloaded,
+    // so a failure here only shows a message (and the button can be pressed again).
+    if (PLAN_ARCHIVE_URL) {
+      setArchive({ status: 'saving' })
+      try {
+        const res = await archivePlan(rows, files.filter((f) => f.status === 'ready').map((f) => `${f.name} [${f.sheet}]`).join(', '))
+        setArchive({ status: 'done', saved: res.saved, duplicate: !!res.duplicate, sendNo: res.sendNo, at: new Date() })
+      } catch (e) {
+        setArchive({ status: 'error', error: e.message })
+      }
+    }
+    setSaving(false)
   }
+  // A changed plan is a new plan: clear the "saved" note.
+  useEffect(() => setArchive((a) => (a.status === 'saving' ? a : { status: 'idle' })), [rows])
 
   useEffect(() => {
     const stop = (e) => e.preventDefault() // dropping a file outside the box must not open it in the tab
@@ -241,10 +258,21 @@ export default function DocumentsPage() {
                     <RotateCcw size={14} /> ล้างการแก้ไข ({changes})
                   </button>
                 )}
-                <button type="button" className="conv-dl" onClick={download} disabled={!drops || saving}>
-                  {saving ? <Loader2 size={15} className="spin" /> : <Download size={15} />} ดาวน์โหลด Excel
+                <button type="button" className="conv-dl" onClick={download} disabled={!drops || saving}
+                  title={PLAN_ARCHIVE_URL ? 'ดาวน์โหลดไฟล์ Excel และบันทึกแผนงานชุดนี้ลง Google Sheet' : 'ดาวน์โหลดไฟล์ Excel'}>
+                  {saving ? <Loader2 size={15} className="spin" /> : <Download size={15} />}
+                  {PLAN_ARCHIVE_URL ? ' ดาวน์โหลด Excel + บันทึกลงชีท' : ' ดาวน์โหลด Excel'}
                 </button>
               </div>
+              {archive.status !== 'idle' && (
+                <p className={`conv-archive ${archive.status}`} role="status">
+                  {archive.status === 'saving' && <><Loader2 size={13} className="spin" /> กำลังบันทึกลง Google Sheet…</>}
+                  {archive.status === 'done' && (archive.duplicate
+                    ? <><CheckCircle2 size={13} /> แผนงานชุดนี้บันทึกไว้ในชีทแล้ว{archive.sendNo ? ` เป็นการส่งครั้งที่ ${archive.sendNo}` : ''} (ไม่บันทึกซ้ำ)</>
+                    : <><CheckCircle2 size={13} /> บันทึกลง Google Sheet แล้ว · ส่งครั้งที่ {archive.sendNo} · {archive.saved} แถว · {archive.at.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</>)}
+                  {archive.status === 'error' && <><AlertTriangle size={13} /> ดาวน์โหลดไฟล์แล้ว แต่บันทึกลงชีทไม่สำเร็จ: {archive.error} · กดปุ่มอีกครั้งเพื่อลองใหม่</>}
+                </p>
+              )}
             </div>
             <p className="muted conv-hint">
               คลิกช่องเพื่อแก้ไข · <Plus size={12} /> เพิ่มจุดส่งใต้แถวนั้น · <Trash2 size={12} /> ลบแถว (ลบแถวแรกของเที่ยว = ลบทั้งเที่ยว)
