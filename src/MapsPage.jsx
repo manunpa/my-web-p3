@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Search, RefreshCw, MapPin, Layers, Crosshair, X, Copy, Check, ExternalLink, AlertTriangle,
-  LocateFixed, Navigation, Fuel,
+  LocateFixed, Navigation, Fuel, Car, Bus, Bike,
 } from 'lucide-react'
 import {
   loadGeofences, cachedGeofences, googleMapsLink, navLink, parseCoords, OTHER_SUPPLIER_COLOR,
@@ -21,14 +21,23 @@ const TYPES = {
     { id: 'road', label: 'แผนที่' },
     { id: 'dark', label: 'แผนที่มืด' },
     { id: 'satellite', label: 'ดาวเทียม' },
+    { id: 'terrain', label: 'ภูมิประเทศ' },
   ],
   google: [
     { id: 'road', label: 'แผนที่' },
     { id: 'dark', label: 'แผนที่มืด' },
     { id: 'satellite', label: 'ดาวเทียม' },
     { id: 'hybrid', label: 'ไฮบริด' },
+    { id: 'terrain', label: 'ภูมิประเทศ' },
   ],
 }
+
+// Extra Google layers. They are part of the normal map (no extra map loads, no extra cost).
+const GOOGLE_OVERLAYS = [
+  { id: 'traffic', label: 'การจราจร', Icon: Car },
+  { id: 'transit', label: 'ขนส่งสาธารณะ', Icon: Bus },
+  { id: 'bike', label: 'จักรยาน', Icon: Bike },
+]
 
 const PAGE = 100
 const nf = new Intl.NumberFormat('th-TH')
@@ -174,6 +183,14 @@ export default function MapsPage() {
 
   useEffect(() => { store.set('maps.engine', engine); store.set('maps.type', type) }, [engine, type])
 
+  const [overlays, setOverlays] = useState(() => new Set(store.get('maps.overlays', '').split(',').filter(Boolean)))
+  useEffect(() => store.set('maps.overlays', [...overlays].join(',')), [overlays])
+  const toggleOverlay = (id) => setOverlays((o) => {
+    const n = new Set(o)
+    n.has(id) ? n.delete(id) : n.add(id)
+    return n
+  })
+
   const switchEngine = (id) => {
     setEngine(id)
     setOpened((o) => (o.has(id) ? o : new Set(o).add(id)))
@@ -275,6 +292,16 @@ export default function MapsPage() {
                 className={type === t.id ? 'on' : ''} onClick={() => setType(t.id)}>{t.label}</button>
             ))}
           </div>
+          {engine === 'google' && (
+            <div className="seg-ctl" role="group" aria-label="ชั้นข้อมูลเพิ่มเติมของ Google">
+              {GOOGLE_OVERLAYS.map(({ id, label, Icon }) => (
+                <button key={id} type="button" aria-pressed={overlays.has(id)} className={overlays.has(id) ? 'on' : ''}
+                  onClick={() => toggleOverlay(id)} title={`${overlays.has(id) ? 'ซ่อน' : 'แสดง'}${label}`}>
+                  <Icon size={14} /> {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </header>
 
@@ -422,7 +449,7 @@ export default function MapsPage() {
             <>
               {/* Both maps stay alive once opened, so switching back and forth is instant. */}
               {opened.has('osm') && <LeafletMap active={engine === 'osm'} {...mapProps} />}
-              {opened.has('google') && <GoogleMap active={engine === 'google'} {...mapProps} />}
+              {opened.has('google') && <GoogleMap active={engine === 'google'} overlays={overlays} {...mapProps} />}
 
               {me && nearest[0] && (
                 <div className={`near-bar${following ? ' following' : ''}`}>

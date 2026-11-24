@@ -62,7 +62,7 @@ const DARK = [
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0b1a26' }] },
 ]
 
-const MAP_TYPES = { road: 'roadmap', dark: 'roadmap', satellite: 'satellite', hybrid: 'hybrid' }
+const MAP_TYPES = { road: 'roadmap', dark: 'roadmap', satellite: 'satellite', hybrid: 'hybrid', terrain: 'terrain' }
 
 const clusterSvg = (size) => 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 40 40">
@@ -78,7 +78,7 @@ const clusterSize = (n) => (n < 10 ? 34 : n < 100 ? 40 : n < 1000 ? 48 : 56)
  */
 export default function GoogleMap({
   points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
-  me, nearest, following, locked, onUnlock, focus,
+  me, nearest, following, locked, onUnlock, focus, overlays,
 }) {
   const box = useRef(null)
   const map = useRef(null)
@@ -226,6 +226,18 @@ export default function GoogleMap({
     if (!ready) return
     map.current.setOptions({ mapTypeId: MAP_TYPES[type] ?? 'roadmap', styles: type === 'dark' ? DARK : LEAN })
   }, [ready, type])
+
+  // traffic / transit / bicycling layers (part of the normal map: no extra map loads)
+  const layers = useRef(null)
+  useEffect(() => {
+    if (!ready) return
+    const gm = window.google.maps
+    layers.current ??= { traffic: new gm.TrafficLayer(), transit: new gm.TransitLayer(), bike: new gm.BicyclingLayer() }
+    for (const [id, layer] of Object.entries(layers.current)) {
+      const want = overlays?.has(id) ? map.current : null
+      if (layer.getMap() !== want) layer.setMap(want)
+    }
+  }, [ready, overlays])
 
   // (re)build the cluster index when the visible set or colors change
   useEffect(() => {

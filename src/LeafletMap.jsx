@@ -20,6 +20,14 @@ const TILES = {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     opts: { maxZoom: 19, attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics' },
   },
+  // Free topographic map (contours + hill shading). Its tiles stop at zoom 17; closer zooms enlarge them.
+  terrain: {
+    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    opts: {
+      subdomains: 'abc', maxNativeZoom: 17, maxZoom: 19,
+      attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM · Style &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
+    },
+  },
 }
 
 // fuel station marker: brand-colored circle with a pump glyph (one icon per color)
