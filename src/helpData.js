@@ -1,7 +1,7 @@
 /* ------------------------------------------------------------------ */
 /* Data source for the help-button (ปุ่มช่วยเหลือ) dashboard             */
 /* ------------------------------------------------------------------ */
-import { norm, parseDate, provinceOf } from './fleetData'
+import { norm, parseDate, provinceOf, areaOf } from './fleetData'
 import { fetchProtectedJson } from './protectedFetch'
 
 // Apps Script web app returning { "<sheet name>": [ { column: value, ... }, ... ], ... }
@@ -53,6 +53,12 @@ const val = (v) => {
 // Test presses ("TEST", "ทดสอบ", "เทสระบบ"...) can be hidden on the dashboard.
 const TEST = /^(test|ทดสอบ|เทส)/i
 
+// "65", "65 km/h", "1,02" -> number; blank or no digits -> null.
+export function parseSpeed(s) {
+  const m = String(s ?? '').replace(/,/g, '').match(/\d+(\.\d+)?/)
+  return m ? +m[0] : null
+}
+
 function keyMap(row) {
   const byNorm = new Map(Object.keys(row).map((k) => [norm(k), k]))
   const out = {}
@@ -92,7 +98,9 @@ function toRecords(rows, provider) {
       detail: get(row, 'detail'),
       location,
       province: provinceOf(location),
+      area: location ? areaOf(location) : '',
       speed: get(row, 'speed'),
+      speedNum: parseSpeed(get(row, 'speed')),
       action,
       test: TEST.test(cause),
     })

@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, LifeBuoy, Headset, Truck, CircleSlash, RefreshCw, Search, AlertTriangle, FlaskConical,
+  Table2, Lightbulb, Check, MessageSquareText,
 } from 'lucide-react'
 import { loadHelp, PROVIDERS, ACTIONS, REFRESH_MS } from './helpData'
-import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, MonthBars, Empty, nf } from './charts'
+import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, HourHeat, MonthBars, Empty, nf } from './charts'
 import {
   DAY, times, dShort, dDay, dTime, hm, startOfDay, pctChange, countBy, toInput, rangeFor, monthly,
-  DashTabs, PeriodPicker, RangeBar, usePointerGlow,
+  DashTabs, PeriodPicker, RangeBar, usePointerGlow, reportHref,
 } from './dashShared'
+import { highlights, summaryText, weekHeat, repeatPlates, mixText, REPEAT_MIN } from './helpInsights'
 
 const ACTION_IDS = Object.keys(ACTIONS)
 const PROVIDER_COLOR = Object.fromEntries(PROVIDERS.map((p) => [p.id, p.color]))
@@ -49,8 +51,14 @@ function analyse(records, range) {
   const spark = (a) => tail.map((d) => d.rows.filter((r) => r.action === a).length)
   const count = (v) => nf.format(Math.round(v))
 
+  const dayY = (t) => new Date(t).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })
+
   return {
     rows, hours,
+    highlights: highlights(rows, prev, to),
+    summary: (scope) => summaryText(rows, prev, `${dayY(from)} – ${dayY(Math.min(to, Date.now()) - 1)}`, scope, to),
+    heat: weekHeat(rows),
+    repeats: repeatPlates(rows),
     daily: days.map((d) => ({ date: d.date, value: d.rows.length })),
     providers: PROVIDERS.map((p) => {
       const pr = rows.filter((r) => r.provider === p.id)
@@ -105,6 +113,64 @@ function ProviderSplit({ providers }) {
       <ul className="legend inline">
         {ACTION_IDS.map((a) => <li key={a}><i style={{ background: ACTIONS[a].color }} /><span>{ACTIONS[a].label}</span></li>)}
       </ul>
+    </div>
+  )
+}
+
+/* ---------- "ควรรู้": findings and the copyable summary ---------- */
+
+function HighlightsPanel({ items, text, rep, i }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    } catch { /* clipboard blocked: nothing else to do */ }
+  }
+  return (
+    <Panel className="span-3" i={i} title="ควรรู้" note="สรุปอัตโนมัติจากช่วงที่เลือก · ป้ายสีเหลือง = ควรดูต่อ"
+      actions={(
+        <button type="button" className="more" onClick={copy} title="ข้อความสรุปสั้น ๆ สำหรับวางในไลน์หรือบันทึกการประชุม">
+          {copied ? <Check size={14} /> : <MessageSquareText size={14} />} {copied ? 'คัดลอกแล้ว' : 'คัดลอกข้อความสรุป'}
+        </button>
+      )}>
+      {items.length ? (
+        <ul className="hl-list">
+          {items.map((h) => (
+            <li key={h.text} className={h.warn ? 'warn' : ''}>
+              {h.warn ? <AlertTriangle size={14} /> : <Lightbulb size={14} />}
+              <span>{h.text}</span>
+              {h.report && <a className="hl-link" href={rep(h.report)}>ดูตาราง</a>}
+            </li>
+          ))}
+        </ul>
+      ) : <Empty />}
+    </Panel>
+  )
+}
+
+/* ---------- plates pressed again and again ---------- */
+
+function RepeatPlates({ list }) {
+  if (!list.length) return <Empty>ไม่มีรถที่กดตั้งแต่ {REPEAT_MIN} ครั้งในช่วงนี้</Empty>
+  return (
+    <div className="table-scroll">
+      <table className="orders insight">
+        <thead><tr><th>หมายเลขรถ</th><th className="num">กด</th><th className="num">วัน</th><th>สาเหตุหลัก</th><th>การดำเนินการ</th><th>กดล่าสุด</th></tr></thead>
+        <tbody>
+          {list.slice(0, 8).map((p, i) => (
+            <tr key={p.plate} style={{ '--i': Math.min(i, 12) }}>
+              <td className="mono nowrap">{p.plate}<small>{p.unit}</small></td>
+              <td className="num"><b>{nf.format(p.count)}</b></td>
+              <td className="num">{nf.format(p.days)}</td>
+              <td className="clip" title={p.cause?.name}>{p.cause ? <>{p.cause.name}<small>{nf.format(p.cause.value)} ครั้ง</small></> : '–'}</td>
+              <td className="clip wide" title={mixText(p.mix)}>{mixText(p.mix)}</td>
+              <td className="nowrap">{dTime(p.last)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -255,6 +321,10 @@ export default function HelpDashboard() {
     setPeriod('custom')
   }
 
+  // Panel title -> its table on the Reports page, with this page's period, provider and test filter.
+  const rep = (id, opts) => reportHref(id, period, custom, { provider: provider === 'all' ? '' : provider, tests: hideTests ? 'real' : '', ...opts })
+  const scope = [provider !== 'all' && provider, hideTests && 'ไม่รวมกดทดสอบ'].filter(Boolean).join(' · ')
+
   const badRange = period === 'custom' && !range
   const providerCount = (id) => state.records.filter((r) => (id === 'all' || r.provider === id) && !(hideTests && r.test)).length
 
@@ -274,6 +344,9 @@ export default function HelpDashboard() {
           <button type="button" className="icon-btn" onClick={load} disabled={busy} aria-label="โหลดข้อมูลใหม่" title="โหลดข้อมูลใหม่">
             <RefreshCw size={16} className={busy ? 'spin' : ''} />
           </button>
+          <a className="rep-btn" href={rep({ src: 'help' })} title="ดูข้อมูลของกล่องในหน้านี้เป็นตาราง และส่งออก Excel / CSV">
+            <Table2 size={15} /> รายงาน
+          </a>
           <PeriodPicker period={period} onChoose={choose} />
         </header>
 
@@ -333,7 +406,9 @@ export default function HelpDashboard() {
             </div>
 
             <div className="dash-grid">
-              <Panel className="span-2" i={4} title="จำนวนการกดปุ่มรายวัน"
+              <HighlightsPanel i={4} items={data.highlights} text={data.summary(scope)} rep={rep} />
+
+              <Panel className="span-2" i={4} href={rep('help-daily')} title="จำนวนการกดปุ่มรายวัน"
                 note={`${nf.format(data.rows.length)} ครั้ง · ${dShort(data.daily[0].date)} – ${dShort(data.daily.at(-1).date)}`}>
                 {data.rows.length ? (
                   <LineChart data={data.daily} animKey={animKey} format={times} integer
@@ -341,11 +416,11 @@ export default function HelpDashboard() {
                 ) : <Empty />}
               </Panel>
 
-              <Panel i={5} title="การดำเนินการ" note="RSC / Operation / No action">
+              <Panel i={5} href={rep('help-action-cause')} title="การดำเนินการ" note="RSC / Operation / No action · ตารางแยกตามสาเหตุ">
                 <Donut data={data.actions} animKey={animKey} unit="ครั้ง" />
               </Panel>
 
-              <Panel className="span-3" i={6} title="สถิติรายเดือน"
+              <Panel className="span-3" i={6} href={rep('help-monthly')} title="สถิติรายเดือน"
                 note={`12 เดือนล่าสุด แยกตาม${provider === 'all' ? 'ผู้ให้บริการ' : 'การดำเนินการ'} · คลิกแท่งเพื่อดูเดือนนั้น`}>
                 <MonthBars months={months} active={(i) => months[i].active} onPick={pickMonth}
                   format={times} animKey={`${provider}:${hideTests}:${state.at?.getTime()}`} />
@@ -356,7 +431,7 @@ export default function HelpDashboard() {
                 </ul>
               </Panel>
 
-              <Panel className="span-2" i={7} title="อันดับสูงสุด" note="จำนวนการกดปุ่ม (10 อันดับ)"
+              <Panel className="span-2" i={7} href={rep('help-rank', { by: rank })} title="อันดับสูงสุด" note="จำนวนการกดปุ่ม (10 อันดับ)"
                 actions={(
                   <div className="seg-ctl small" role="radiogroup" aria-label="จัดอันดับตาม">
                     {RANKS.map((r) => (
@@ -368,7 +443,7 @@ export default function HelpDashboard() {
                 <RankBars key={rank + animKey} data={data.ranks[rank].slice(0, 10)} format={times} total={data.rows.length} />
               </Panel>
 
-              <Panel i={8} title="แยกตามผู้ให้บริการ" note="สัดส่วนการดำเนินการ">
+              <Panel i={8} href={rep('help-providers')} title="แยกตามผู้ให้บริการ" note="สัดส่วนการดำเนินการ">
                 <ProviderSplit providers={data.providers} />
               </Panel>
 
@@ -376,7 +451,18 @@ export default function HelpDashboard() {
                 {data.hours.some(Boolean) ? <HourBars key={animKey} counts={data.hours} format={times} /> : <Empty />}
               </Panel>
 
-              <Panel className="span-3" i={10} title="รายการกดปุ่มช่วยเหลือ" note="เรียงจากล่าสุด">
+              <Panel className="span-3" i={10} href={rep('help-week-hour')} title="วันในสัปดาห์ × ช่วงเวลา" note="สีเข้ม = กดบ่อย ใช้ดูว่าควรมีคนเฝ้าช่วงไหน">
+                {data.heat.some((d) => d.total)
+                  ? <HourHeat key={animKey} rows={data.heat} format={times} ariaLabel="จำนวนการกดปุ่มแยกตามวันในสัปดาห์และชั่วโมง" />
+                  : <Empty />}
+              </Panel>
+
+              <Panel className="span-3" i={11} href={rep('help-repeat-plates')} title="รถที่กดซ้ำ"
+                note={`กดตั้งแต่ ${REPEAT_MIN} ครั้งในช่วงที่เลือก · 8 คันแรก (ตารางเต็มในรายงาน)`}>
+                <RepeatPlates list={data.repeats} />
+              </Panel>
+
+              <Panel className="span-3" i={12} href={rep('help-cases')} title="รายการกดปุ่มช่วยเหลือ" note="เรียงจากล่าสุด">
                 <HelpTable rows={data.rows} />
               </Panel>
             </div>

@@ -418,7 +418,7 @@ export function HourBars({ counts, format }) {
 
 // rows: [{ name, hours: [24 counts], total }]. One hue (the gold accent), light -> strong by count;
 // empty cells stay a faint outline so "none" is not confused with "few".
-export function HourHeat({ rows, format }) {
+export function HourHeat({ rows, format, ariaLabel = 'จำนวนเคสแยกตามประเภทการจอดและชั่วโมงที่เริ่ม' }) {
   const [ref, w] = useWidth()
   const [hover, setHover] = useState(null)
   const narrow = w < 560
@@ -434,7 +434,7 @@ export function HourHeat({ rows, format }) {
   return (
     <div className="chart heat" ref={ref} onPointerLeave={() => setHover(null)}>
       {w > 0 && (
-        <svg width={w} height={h} role="img" aria-label="จำนวนเคสแยกตามประเภทการจอดและชั่วโมงที่เริ่ม">
+        <svg width={w} height={h} role="img" aria-label={ariaLabel}>
           {rows.map((r, ri) => (
             <g key={r.name}>
               <text x={m.l - 8} y={m.t + ri * rowH + rowH / 2} dy="0.32em" textAnchor="end" className="tick heat-name">

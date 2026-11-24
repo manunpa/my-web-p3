@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, FileSpreadsheet, FileText, Copy, Printer, RefreshCw, AlertTriangle, Check, LayoutDashboard } from 'lucide-react'
+import { ArrowLeft, FileSpreadsheet, FileText, Copy, Printer, RefreshCw, AlertTriangle, Check, LayoutDashboard, MessageSquareText } from 'lucide-react'
 import { Empty } from './charts'
 import { PeriodPicker, RangeBar, rangeFor, toInput, usePointerGlow } from './dashShared'
 import ReportTable from './ReportTable'
@@ -7,9 +7,13 @@ import { downloadXlsx, downloadCSV, toTSV } from './reportExport'
 import { LEO_REPORTS, LEO_SOURCE } from './reports/leoReports'
 import { BEHAVIOR_REPORTS, BEHAVIOR_SOURCE } from './reports/behaviorReports'
 import { ADAS_REPORTS, ADAS_SOURCE } from './reports/adasReports'
+import { HELP_REPORTS, HELP_SOURCE } from './reports/helpReports'
 
 // Report catalog, grouped by the dashboard the reports come from. Add a source here to add a group.
-const SOURCES = [{ ...LEO_SOURCE, reports: LEO_REPORTS }, { ...BEHAVIOR_SOURCE, reports: BEHAVIOR_REPORTS }, { ...ADAS_SOURCE, reports: ADAS_REPORTS }]
+const SOURCES = [
+  { ...LEO_SOURCE, reports: LEO_REPORTS }, { ...BEHAVIOR_SOURCE, reports: BEHAVIOR_REPORTS },
+  { ...ADAS_SOURCE, reports: ADAS_REPORTS }, { ...HELP_SOURCE, reports: HELP_REPORTS },
+]
 const ALL = SOURCES.flatMap((s) => s.reports.map((r) => ({ ...r, source: s })))
 const byId = (id) => ALL.find((r) => r.id === id)
 
@@ -63,7 +67,7 @@ export default function ReportsPage() {
   const [period, setPeriod] = useState(init.period)
   const [custom, setCustom] = useState(init.custom)
   const [opts, setOpts] = useState(init.opts)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState('')
   const [busy, setBusy] = useState(false)
   const stage = useRef(null)
   usePointerGlow(stage)
@@ -146,11 +150,12 @@ export default function ReportsPage() {
     } finally { setBusy(false) }
   }
   const exportCsv = () => downloadCSV({ title: def.title, period: [periodText, filterText].filter(Boolean).join(' · '), cols: result.cols, rows: result.rows, total: result.total, fileBase })
-  const copy = async () => {
+  // what: 'table' (tab-separated, pastes as a table) or 'text' (the report's summary for LINE / a note).
+  const copy = async (what) => {
     try {
-      await navigator.clipboard.writeText(toTSV(result.cols, result.rows, result.total))
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1800)
+      await navigator.clipboard.writeText(what === 'text' ? result.text : toTSV(result.cols, result.rows, result.total))
+      setCopied(what)
+      setTimeout(() => setCopied(''), 1800)
     } catch { /* clipboard blocked: nothing else to do */ }
   }
 
@@ -250,7 +255,12 @@ export default function ReportsPage() {
               <div className="rep-actions">
                 <button type="button" className="more" onClick={exportXlsx} disabled={busy || !result.rows.length}><FileSpreadsheet size={14} /> Excel</button>
                 <button type="button" className="more" onClick={exportCsv} disabled={!result.rows.length}><FileText size={14} /> CSV</button>
-                <button type="button" className="more" onClick={copy} disabled={!result.rows.length}>{copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'คัดลอกแล้ว' : 'คัดลอก'}</button>
+                <button type="button" className="more" onClick={() => copy('table')} disabled={!result.rows.length}>{copied === 'table' ? <Check size={14} /> : <Copy size={14} />} {copied === 'table' ? 'คัดลอกแล้ว' : 'คัดลอก'}</button>
+                {result.text && (
+                  <button type="button" className="more" onClick={() => copy('text')} title="ข้อความสรุปสั้น ๆ สำหรับวางในไลน์หรือบันทึกการประชุม">
+                    {copied === 'text' ? <Check size={14} /> : <MessageSquareText size={14} />} {copied === 'text' ? 'คัดลอกแล้ว' : 'คัดลอกข้อความสรุป'}
+                  </button>
+                )}
                 <button type="button" className="more" onClick={() => print()}><Printer size={14} /> พิมพ์</button>
               </div>
             </div>
