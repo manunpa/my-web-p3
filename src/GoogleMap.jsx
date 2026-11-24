@@ -56,11 +56,15 @@ export function watchGoogleAuth(cb) {
   return () => authListeners.delete(cb)
 }
 
-// Fewer things to draw: hide points of interest and transit everywhere.
+// Fewer things to draw: hide points of interest and transit unless asked for.
 const LEAN = [
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
 ]
+
+// Google's own place pins are a switch on the page (part of the normal map: no extra cost).
+const stylesFor = (type, poi) => (type === 'dark' ? DARK : LEAN)
+  .filter((s) => !(poi && s.featureType === 'poi'))
 
 // Dark roadmap that matches the site.
 const DARK = [
@@ -282,8 +286,9 @@ export default function GoogleMap({
   // map type
   useEffect(() => {
     if (!ready) return
-    map.current.setOptions({ mapTypeId: MAP_TYPES[type] ?? 'roadmap', styles: type === 'dark' ? DARK : LEAN })
-  }, [ready, type])
+    const poi = !!overlays?.has('poi')
+    map.current.setOptions({ mapTypeId: MAP_TYPES[type] ?? 'roadmap', styles: stylesFor(type, poi), clickableIcons: poi })
+  }, [ready, type, overlays])
 
   // traffic / transit / bicycling layers (part of the normal map: no extra map loads)
   const layers = useRef(null)

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Search, RefreshCw, MapPin, Layers, Crosshair, X, Copy, Check, ExternalLink, AlertTriangle,
-  LocateFixed, Navigation, Fuel, Car, Bus, Bike, Eye, CloudRain, Play, Pause, Anchor, Wind, Route,
+  LocateFixed, Navigation, Fuel, Store, Car, Bus, Bike, Eye, CloudRain, Play, Pause, Anchor, Wind, Route,
 } from 'lucide-react'
 import { loadOffshore, cachedOffshore, DMF_CREDIT, PLATFORM_GROUP, PLATFORM_COLOR } from './offshoreData'
 import { loadRainFrames, rainTimeLabel, lagLabel } from './rainRadar'
@@ -46,6 +46,7 @@ const TYPES = {
 
 // Extra Google layers. They are part of the normal map (no extra map loads, no extra cost).
 const GOOGLE_OVERLAYS = [
+  { id: 'poi', label: 'หมุด Google', Icon: Store },
   { id: 'traffic', label: 'การจราจร', Icon: Car },
   { id: 'transit', label: 'ขนส่งสาธารณะ', Icon: Bus },
   { id: 'bike', label: 'จักรยาน', Icon: Bike },
