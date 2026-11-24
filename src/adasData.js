@@ -1,7 +1,8 @@
 /* ------------------------------------------------------------------ */
 /* Data source for the ADAS / DMS (Songdee) alert dashboard             */
 /* ------------------------------------------------------------------ */
-import { norm, parseDate, provinceOf } from './fleetData'
+import { norm, parseDate, provinceOf, areaOf } from './fleetData'
+import { classify } from './adasInsights'
 import { fetchProtectedJson } from './protectedFetch'
 
 // Web app URL from apps-script/adas-dms.gs (ends with /exec). Leave '' to show sample data.
@@ -20,6 +21,7 @@ const FIELDS = {
   date: ['วันที่'],
   time: ['เวลา', 'เวลาแจ้งเตือน'],
   location: ['สถานที่'],
+  geofence: ['ชื่อ Geofence', 'ชื่อGeofence', 'Geofence'],
   speed: ['ความเร็ว'],
   note: ['หมายเหตุโฆษณา', 'หมายเหตุ'],
   review: ['สถานะการตรวจสอบ', 'สถานะตรวจสอบ'],
@@ -48,10 +50,10 @@ function keyMap(headers) {
 }
 
 // The same address appears thousands of times; look each one up once.
-const provinces = new Map()
-const province = (loc) => {
-  if (!provinces.has(loc)) provinces.set(loc, provinceOf(loc))
-  return provinces.get(loc)
+const places = new Map()
+const place = (loc) => {
+  if (!places.has(loc)) places.set(loc, { province: provinceOf(loc), area: areaOf(loc) })
+  return places.get(loc)
 }
 
 // TRUE / FALSE (checkbox) in any letter case -> 'TRUE' / 'FALSE'.
@@ -72,18 +74,25 @@ export function toRecords(rows) {
     const speed = parseFloat(get(row, 'speed').replace(/,/g, ''))
     const review = get(row, 'review')
     const location = get(row, 'location')
+    const { province, area } = place(location)
+    const note = get(row, 'note')
+    const driver = get(row, 'driver')
     records.push({
       id: i,
       plate: get(row, 'plate') || '(ไม่ระบุ)',
       unit: get(row, 'unit') || '(ไม่ระบุ)',
-      driver: get(row, 'driver') || '(ไม่ระบุ)',
+      driver: driver || '(ไม่ระบุ)',
+      noDriver: !driver || /^n\/?a$/i.test(driver), // "NA" = the camera did not know the driver
       type: get(row, 'type') || '(ไม่ระบุ)',
       start,
       hasTime: dateHasTime || /\d:\d/.test(time),
       location,
-      province: province(location),
+      province,
+      area,
+      geofence: get(row, 'geofence'),
       speed: isNaN(speed) ? null : speed,
-      note: get(row, 'note'),
+      note,
+      ...classify(note), // outcome (risky | normal | noise | other), category, weight
       review: review || 'ยังไม่ตรวจสอบ',
       reviewed: !!review && !NOT_REVIEWED.test(review),
       alertStatus: bool(get(row, 'alertStatus')) || '(ไม่ระบุ)',

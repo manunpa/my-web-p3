@@ -244,6 +244,7 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .mix-rows li{grid-template-columns:62px minmax(120px,1fr) 44px 110px}
 .mix-rows .mix-bar{width:100%}
 .mix-rows small{color:var(--muted);font-size:11px}
+.mix-rows.geo li{grid-template-columns:112px minmax(90px,1fr) 40px 96px}
 .insight.effect td{vertical-align:middle}
 .cause-matrix{min-width:760px}
 .cause-matrix th{white-space:normal;max-width:110px;font-size:11px;line-height:1.3}

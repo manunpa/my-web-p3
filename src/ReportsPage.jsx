@@ -6,9 +6,10 @@ import ReportTable from './ReportTable'
 import { downloadXlsx, downloadCSV, toTSV } from './reportExport'
 import { LEO_REPORTS, LEO_SOURCE } from './reports/leoReports'
 import { BEHAVIOR_REPORTS, BEHAVIOR_SOURCE } from './reports/behaviorReports'
+import { ADAS_REPORTS, ADAS_SOURCE } from './reports/adasReports'
 
 // Report catalog, grouped by the dashboard the reports come from. Add a source here to add a group.
-const SOURCES = [{ ...LEO_SOURCE, reports: LEO_REPORTS }, { ...BEHAVIOR_SOURCE, reports: BEHAVIOR_REPORTS }]
+const SOURCES = [{ ...LEO_SOURCE, reports: LEO_REPORTS }, { ...BEHAVIOR_SOURCE, reports: BEHAVIOR_REPORTS }, { ...ADAS_SOURCE, reports: ADAS_REPORTS }]
 const ALL = SOURCES.flatMap((s) => s.reports.map((r) => ({ ...r, source: s })))
 const byId = (id) => ALL.find((r) => r.id === id)
 

@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Eye, CheckCircle2, Clock3, Gauge, RefreshCw, Search, AlertTriangle, XCircle, BellRing } from 'lucide-react'
+import { ArrowLeft, Eye, CheckCircle2, Clock3, RefreshCw, Search, AlertTriangle, XCircle, BellRing, ShieldAlert, Building2, Table2 } from 'lucide-react'
 import { loadAdas, ADAS_API_URL, REFRESH_MS } from './adasData'
+import { loadBehavior } from './behaviorData'
+import {
+  typeQuality, noiseMonths, cameraHealth, driverScores, categoryMix, fatigueRepeats, weekHeat, hotspots, geofenceSplit,
+  behaviorLink, linkBeforeAfter, isRisky,
+} from './adasInsights'
+import { AdasInsights } from './AdasInsightsPanels'
 import { Panel, Kpi, LineChart, Donut, RankBars, HourBars, MonthBars, Empty, nf } from './charts'
 import {
   DAY, times, dShort, dDay, dTime, hm, startOfDay, pctChange, countBy, toInput, rangeFor, monthly,
-  DashTabs, PeriodPicker, RangeBar, usePointerGlow,
+  DashTabs, PeriodPicker, RangeBar, usePointerGlow, reportHref,
 } from './dashShared'
 
 // Alert types: the 3 most common get the categorical colors, the rest fold into "อื่นๆ".
 const TYPE_COLORS = ['#3987e5', '#d95926', '#199e70']
 const STATUS_COLORS = ['#8f6ae0', '#e0a321', '#d0605a']
 const OTHER_COLOR = '#898781'
-// Review result in "หมายเหตุโฆษณา" that means the camera alert was wrong.
-const FALSE_ALERT = /false\s*alert/i
 
 const RANKS = [
   { id: 'driver', label: 'คนขับ' },
@@ -31,7 +35,6 @@ const SPEED_BANDS = [
 ]
 
 const pct = (n, total) => (total ? `${((n / total) * 100).toFixed(n / total < 0.1 ? 1 : 0)}%` : '0%')
-const kmh = (v) => `${nf.format(Math.round(v))} กม./ชม.`
 
 // Colors follow the value, not its rank in the current range.
 function palette(records, key, colors) {
@@ -72,14 +75,15 @@ function analyse(records, range, types, statuses) {
   for (const r of rows) if (r.hasTime) hours[r.start.getHours()]++
 
   const withSpeed = rows.filter((r) => r.speed !== null)
-  const avgSpeed = (rs) => {
-    const s = rs.filter((r) => r.speed !== null)
-    return s.length ? s.reduce((t, r) => t + r.speed, 0) / s.length : 0
-  }
   const reviewed = rows.filter((r) => r.reviewed).length
   const pending = rows.length - reviewed
-  const isFalse = (r) => FALSE_ALERT.test(r.note)
-  const falseAlerts = rows.filter(isFalse).length
+  // Review results grouped in src/adasInsights.js: risky behavior / normal check / unusable alert.
+  const isNoise = (r) => r.outcome === 'noise'
+  const risky = rows.filter(isRisky)
+  const noise = rows.filter(isNoise).length
+  const falseAlerts = rows.filter((r) => /false\s*alert/i.test(r.note)).length
+  const noVideo = rows.filter((r) => /no\s*video/i.test(r.note)).length
+  const sleep = risky.filter((r) => r.fatigue).length
   const isTrue = (r) => r.alertStatus === 'TRUE'
   const alertTrue = rows.filter(isTrue).length
   const alertFalse = rows.filter((r) => r.alertStatus === 'FALSE').length
@@ -104,9 +108,15 @@ function analyse(records, range, types, statuses) {
         spark: tail.map((d) => d.rows.length),
       },
       {
-        label: 'False alert', icon: XCircle, value: falseAlerts, format: count,
-        sub: `${pct(falseAlerts, rows.length)} ของทั้งหมด`,
-        spark: tail.map((d) => d.rows.filter(isFalse).length),
+        label: 'พฤติกรรมเสี่ยง (ตรวจยืนยัน)', icon: ShieldAlert, value: risky.length, format: count,
+        delta: prev ? pctChange(risky.length, prev.filter(isRisky).length) : null, upIsGood: false,
+        sub: `${pct(risky.length, rows.length)} ของแจ้งเตือน · ง่วง/หาว ${nf.format(sleep)}`,
+        spark: tail.map((d) => d.rows.filter(isRisky).length),
+      },
+      {
+        label: 'เตือนผิด / ใช้ไม่ได้', icon: XCircle, value: noise, format: count,
+        sub: `${pct(noise, rows.length)} · False alert ${nf.format(falseAlerts)} · ไม่มีวิดีโอ ${nf.format(noVideo)}`,
+        spark: tail.map((d) => d.rows.filter(isNoise).length),
       },
       {
         label: 'ยังไม่ตรวจสอบ', icon: Clock3, value: pending, format: count,
@@ -117,12 +127,6 @@ function analyse(records, range, types, statuses) {
         label: 'สถานะแจ้งเตือน TRUE', icon: BellRing, value: alertTrue, format: count,
         sub: `${pct(alertTrue, rows.length)} ของทั้งหมด · FALSE ${nf.format(alertFalse)}`,
         spark: tail.map((d) => d.rows.filter(isTrue).length),
-      },
-      {
-        label: 'ความเร็วเฉลี่ยขณะแจ้งเตือน', icon: Gauge, value: avgSpeed(rows), format: kmh,
-        delta: prev ? pctChange(avgSpeed(rows), avgSpeed(prev)) : null, upIsGood: false,
-        sub: prev ? compare : `จาก ${nf.format(withSpeed.length)} รายการที่มีความเร็ว`,
-        spark: tail.map((d) => avgSpeed(d.rows)),
       },
     ],
   }
@@ -242,6 +246,9 @@ export default function AdasDashboard() {
   const [period, setPeriod] = useState(30)
   const [custom, setCustom] = useState({ from: '', to: '' })
   const [rank, setRank] = useState('driver')
+  const [unit, setUnit] = useState('')
+  // The behavior log, for linking by plate. Loaded once; the page works without it.
+  const [beh, setBeh] = useState({ status: 'loading', records: [] })
   const stage = useRef(null)
 
   const load = useCallback(async () => {
@@ -257,6 +264,11 @@ export default function AdasDashboard() {
   }, [])
 
   useEffect(() => {
+    loadBehavior().then(({ records }) => setBeh({ status: 'ready', records: records.filter((r) => r.start) }))
+      .catch(() => setBeh({ status: 'error', records: [] }))
+  }, [])
+
+  useEffect(() => {
     load()
     if (!ADAS_API_URL) return
     const id = setInterval(load, REFRESH_MS)
@@ -267,14 +279,41 @@ export default function AdasDashboard() {
 
   const types = useMemo(() => palette(state.records, 'type', TYPE_COLORS), [state.records])
   const statuses = useMemo(() => palette(state.records, 'alertStatus', STATUS_COLORS), [state.records])
-  const range = useMemo(() => rangeFor(state.records, period, custom), [state.records, period, custom])
-  const data = useMemo(() => analyse(state.records, range, types, statuses), [state.records, range, types, statuses])
-  const months = useMemo(() => monthly(state.records, types.split, range), [state.records, types, range])
-  const animKey = `${range?.from}:${range?.to}:${state.at?.getTime()}`
+  const unitList = useMemo(() => countBy(state.records, 'unit').map((u) => u.name).sort((a, b) => a.localeCompare(b, 'th')), [state.records])
+  const scoped = useMemo(() => (unit ? state.records.filter((r) => r.unit === unit) : state.records), [state.records, unit])
+  const range = useMemo(() => rangeFor(scoped, period, custom), [scoped, period, custom])
+  const data = useMemo(() => analyse(scoped, range, types, statuses), [scoped, range, types, statuses])
+  const months = useMemo(() => monthly(scoped, types.split, range), [scoped, types, range])
+  const animKey = `${range?.from}:${range?.to}:${state.at?.getTime()}:${unit}`
+  // Extra analyses (src/adasInsights.js), same range and unit as the rest of the page.
+  const insights = useMemo(() => {
+    if (!data || !range) return null
+    const { from, to, kind } = range
+    const prev = kind === 'all' ? null : scoped.filter((r) => r.start >= from - (to - from) && r.start < from)
+    const rows = data.rows
+    return {
+      animKey,
+      quality: typeQuality(rows),
+      noiseMonths: noiseMonths(scoped),
+      camera: cameraHealth(rows),
+      scores: driverScores(rows, prev),
+      categories: categoryMix(rows),
+      fatigueRepeats: fatigueRepeats(rows),
+      geofence: geofenceSplit(rows),
+      fatigueWeek: weekHeat(rows.filter((r) => isRisky(r) && r.fatigue)),
+      hotspots: hotspots(rows),
+      link: behaviorLink(rows, beh.records, range),
+      linkBA: linkBeforeAfter(scoped, beh.records, range),
+      behaviorStatus: beh.status,
+    }
+  }, [data, range, scoped, beh, animKey])
+  const compareText = range && range.kind !== 'all' ? (period !== 'custom' ? `${period} วันก่อนหน้า` : 'ช่วงก่อนหน้าที่ยาวเท่ากัน') : null
+  // Panel title -> its table on the Reports page, with this page's period, unit and the panel's choices.
+  const rep = (id, opts) => reportHref(id, period, custom, { unit, ...opts })
 
   const choose = (id) => {
     if (id === 'custom' && period !== 'custom') {
-      const r = range ?? rangeFor(state.records, 30, custom)
+      const r = range ?? rangeFor(scoped, 30, custom)
       setCustom({ from: toInput(r.from), to: toInput(Math.min(r.to, Date.now()) - 60000) })
     }
     setPeriod(id)
@@ -304,6 +343,16 @@ export default function AdasDashboard() {
           <button type="button" className="icon-btn" onClick={load} disabled={busy} aria-label="โหลดข้อมูลใหม่" title="โหลดข้อมูลใหม่">
             <RefreshCw size={16} className={busy ? 'spin' : ''} />
           </button>
+          <a className="rep-btn" href={rep({ src: 'adas' })} title="ดูข้อมูลของกล่องในหน้านี้เป็นตาราง และส่งออก Excel / CSV">
+            <Table2 size={15} /> รายงาน
+          </a>
+          <label className="f unit-pick" title="หน่วยงาน">
+            <Building2 size={15} />
+            <select value={unit} onChange={(e) => setUnit(e.target.value)} aria-label="เลือกหน่วยงาน">
+              <option value="">ทุกหน่วยงาน</option>
+              {unitList.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </label>
           <PeriodPicker period={period} onChoose={choose} />
         </header>
 
@@ -342,7 +391,7 @@ export default function AdasDashboard() {
             </div>
 
             <div className="dash-grid">
-              <Panel className="span-2" i={4} title="จำนวนแจ้งเตือนรายวัน"
+              <Panel className="span-2" i={4} href={rep('adas-daily')} title="จำนวนแจ้งเตือนรายวัน"
                 note={`${nf.format(data.rows.length)} ครั้ง · ${dShort(data.daily[0].date)} – ${dShort(data.daily.at(-1).date)}`}>
                 {data.rows.length ? (
                   <LineChart data={data.daily} animKey={animKey} format={times} integer
@@ -350,11 +399,11 @@ export default function AdasDashboard() {
                 ) : <Empty />}
               </Panel>
 
-              <Panel i={5} title="ประเภทการแจ้งเตือน" note="3 ประเภทที่พบบ่อยสุด">
+              <Panel i={5} href={rep('adas-type-quality')} title="ประเภทการแจ้งเตือน" note="3 ประเภทที่พบบ่อยสุด">
                 <Donut data={data.typeSlices} animKey={animKey} unit="ครั้ง" />
               </Panel>
 
-              <Panel className="span-3" i={6} title="สถิติรายเดือน"
+              <Panel className="span-3" i={6} href={rep('adas-monthly')} title="สถิติรายเดือน"
                 note="12 เดือนล่าสุด แยกตามประเภท · เดือนในช่วงที่เลือกแสดงสีเข้ม · คลิกแท่งเพื่อดูเดือนนั้น">
                 <MonthBars months={months} active={(i) => months[i].active} onPick={pickMonth}
                   format={times} animKey={state.at?.getTime()} />
@@ -365,7 +414,7 @@ export default function AdasDashboard() {
                 </ul>
               </Panel>
 
-              <Panel className="span-2" i={7} title="อันดับสูงสุด" note="จำนวนแจ้งเตือน (10 อันดับ)"
+              <Panel className="span-2" i={7} href={rep('adas-rank', { by: rank })} title="อันดับสูงสุด" note="จำนวนแจ้งเตือน (10 อันดับ)"
                 actions={(
                   <div className="seg-ctl small" role="radiogroup" aria-label="จัดอันดับตาม">
                     {RANKS.map((r) => (
@@ -377,23 +426,25 @@ export default function AdasDashboard() {
                 <RankBars key={rank + animKey} data={data.ranks[rank].slice(0, 10)} format={times} total={data.rows.length} />
               </Panel>
 
-              <Panel i={8} title="ความเร็วขณะแจ้งเตือน" note={`${nf.format(data.speedCount)} รายการที่มีความเร็ว`}>
+              <Panel i={8} href={rep('adas-speed')} title="ความเร็วขณะแจ้งเตือน" note={`${nf.format(data.speedCount)} รายการที่มีความเร็ว`}>
                 <SpeedBands key={animKey} bands={data.speedBands} total={data.speedCount} />
               </Panel>
 
-              <Panel className="span-2" i={9} title="ผลการตรวจสอบ" note="จากคอลัมน์หมายเหตุ (10 อันดับ)">
+              <Panel className="span-2" i={9} href={rep('adas-notes')} title="ผลการตรวจสอบ" note="จากคอลัมน์หมายเหตุ (10 อันดับ)">
                 <RankBars key={'note' + animKey} data={data.notes.slice(0, 10)} format={times} total={data.noteCount} />
               </Panel>
 
-              <Panel i={10} title="สถานะแจ้งเตือน">
+              <Panel i={10} href={rep('adas-status')} title="สถานะแจ้งเตือน">
                 <Donut data={data.statusSlices} animKey={animKey} unit="ครั้ง" />
               </Panel>
 
-              <Panel className="span-3" i={11} title="ช่วงเวลาที่เกิดแจ้งเตือน" note="รวมทุกวัน แยกตามชั่วโมง (แท่งสว่าง = ช่วงที่เกิดบ่อยสุด)">
+              <Panel className="span-3" i={11} href={rep('adas-hour')} title="ช่วงเวลาที่เกิดแจ้งเตือน" note="รวมทุกวัน แยกตามชั่วโมง (แท่งสว่าง = ช่วงที่เกิดบ่อยสุด)">
                 {data.hours.some(Boolean) ? <HourBars key={animKey} counts={data.hours} format={times} /> : <Empty />}
               </Panel>
 
-              <Panel className="span-3" i={12} title="รายการแจ้งเตือน" note="เรียงจากล่าสุด">
+              {insights && <AdasInsights d={insights} compare={compareText} i0={12} rep={rep} />}
+
+              <Panel className="span-3" i={22} href={rep('adas-cases')} title="รายการแจ้งเตือน" note={unit ? `เฉพาะ ${unit} · เรียงจากล่าสุด` : 'เรียงจากล่าสุด'}>
                 <AdasTable rows={data.rows} />
               </Panel>
             </div>

@@ -264,10 +264,10 @@ export function LineChart({ data, animKey, format, tickFormat = (v) => compact.f
           <strong>{format(data[hover].value)}</strong>
         </div>
       )}
-      <table className="sr">
+      <div className="sr"><table>
         <caption>{ariaLabel}</caption>
         <tbody>{data.map((d) => <tr key={+d.date}><td>{tipDate(d.date)}</td><td>{format(d.value)}</td></tr>)}</tbody>
-      </table>
+      </table></div>
     </div>
   )
 }
@@ -468,12 +468,12 @@ export function HourHeat({ rows, format }) {
       <div className="heat-scale" aria-hidden="true">
         <span>น้อย</span><i /><span>มาก (สูงสุด {nf.format(max)} ครั้ง/ช่อง)</span>
       </div>
-      <table className="sr">
-        <caption>จำนวนเคสแยกตามประเภทการจอดและชั่วโมง</caption>
+      <div className="sr"><table>
+        <caption>จำนวนครั้งแยกตามแถวและชั่วโมง</caption>
         <tbody>{rows.map((r) => (
           <tr key={r.name}><th>{r.name}</th>{r.hours.map((v, i) => <td key={i}>{v}</td>)}</tr>
         ))}</tbody>
-      </table>
+      </table></div>
     </div>
   )
 }
@@ -555,10 +555,10 @@ export function MonthBars({ months, active, onPick, format, animKey }) {
           {months[hover].total > 0 && <span className="tip-hint">คลิกเพื่อดูเดือนนี้</span>}
         </div>
       )}
-      <table className="sr">
+      <div className="sr"><table>
         <caption>จำนวนแจ้งเตือนรายเดือน</caption>
         <tbody>{months.map((mo) => <tr key={mo.label}><td>{mo.full}</td><td>{format(mo.total)}</td></tr>)}</tbody>
-      </table>
+      </table></div>
     </div>
   )
 }
