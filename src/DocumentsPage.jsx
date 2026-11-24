@@ -145,7 +145,7 @@ export default function DocumentsPage() {
         let j = i + 1
         while (j < out.length && !out[j].start) j++
         const head = out[i]
-        if (!blank(head.cells[6])) {
+        if (head.cells[6] != null && head.cells[6] !== '') {
           head.cells[7] = null
           head.cells[8] = null
           head.autoPlanTimesCleared = true
