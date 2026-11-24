@@ -17,6 +17,7 @@ import { useTilt, ripple } from './useTilt'
 import { verifyLinkSettings } from './VerifyEmail'
 
 const LoginGlow = lazy(() => import('./LoginGlow'))
+const MenuShards = lazy(() => import('./MenuShards'))
 
 const explain = (code) => {
   switch (code) {
@@ -141,6 +142,7 @@ export default function LoginV7({ notice, onProfileUpdated }) {
 
   return (
     <div className="stage" ref={stage}>
+      <Suspense fallback={null}><MenuShards /></Suspense>
       <Suspense fallback={null}><LoginGlow /></Suspense>
       <form className="card in" ref={card} onSubmit={submit} noValidate>
         {signingUp ? (

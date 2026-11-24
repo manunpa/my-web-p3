@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import {
-  LayoutDashboard, Map as MapIcon, FileText, BarChart3, Settings, Bell, ChevronRight, LogOut,
+  LayoutDashboard, Map as MapIcon, FileText, BarChart3, Settings, Bell, LogOut,
 } from 'lucide-react'
 import { signOut } from 'firebase/auth'
 import { auth } from './firebase'
 import { useTilt, ripple } from './useTilt'
+import OrbitImages from './orbit-images/OrbitImages'
+
+const MenuShards = lazy(() => import('./MenuShards'))
 
 // Edit this list to add, remove or rename buttons.
 // `href` is where the button goes; '#' means the page is not built yet.
@@ -16,6 +19,18 @@ const LINKS = [
   { label: 'Notifications', hint: 'Latest updates', icon: Bell, href: '#/notifications' },
   { label: 'Settings', hint: 'Theme & colors', icon: Settings, href: '#/settings' },
 ]
+
+// The menu as planets circling the title on a tilted ring: hover stops them, drag spins them, click opens.
+const ORBIT = LINKS.map(({ label, hint, icon: Icon }) => ({
+  alt: `${label}: ${hint}`,
+  node: (
+    <span className="orb" title={hint}>
+      <Icon size={22} />
+      <strong>{label}</strong>
+    </span>
+  ),
+}))
+const open = (i) => { location.hash = LINKS[i].href }
 
 export default function Home({ user }) {
   const { stage, card } = useTilt()
@@ -34,21 +49,16 @@ export default function Home({ user }) {
 
   return (
     <div className="stage" ref={stage}>
+      <Suspense fallback={null}><MenuShards /></Suspense>
       <main className="card wide in" ref={card}>
-        <h1>SCC <b>Fleet</b></h1>
         <p className="sub">Signed in as {user.displayName ? `${name} · ${user.email}` : user.email}</p>
 
-        <nav className="tiles" aria-label="Main menu">
-          {LINKS.map(({ label, hint, icon: Icon, href }, i) => (
-            <a key={label} className="tile" href={href} onClick={ripple} style={{ '--i': i + 2 }}>
-              <span className="ic"><Icon size={18} /></span>
-              <span className="tx">
-                <strong>{label}</strong>
-                <small>{hint}</small>
-              </span>
-              <ChevronRight size={16} className="ar" />
-            </a>
-          ))}
+        <nav className="orbit-menu" aria-label="Main menu">
+          <OrbitImages images={ORBIT} onItemClick={open} clickToFront={false}
+            shape="ellipse" baseWidth={1000} radiusX={400} radiusY={200} itemSize={230} rotation={-10} depth={0.7}
+            duration={45} hoverSpeed={0} hoverScale={1.1} itemRadius="50%" shadow={0}
+            showPath pathColor="rgb(var(--glow) / .55)" pathWidth={2}
+            centerContent={<h1 className="sun">SCC <b>Fleet</b></h1>} />
         </nav>
 
         <button type="button" className="out" onClick={logout} disabled={busy}>
