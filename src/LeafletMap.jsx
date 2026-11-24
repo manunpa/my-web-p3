@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import { pointPopupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist, stationSvg } from './mapsData'
 import { createGlide, ACC_CIRCLE_MAX_M } from './myLocation'
+import { RAIN_MAX_ZOOM, RAIN_SHOW_MAX_ZOOM, RAIN_OPACITY } from './rainRadar'
 
 const TILES = {
   road: {
@@ -56,7 +57,7 @@ const clusterIcon = (cluster) => {
 // focus: { key, pts } -> zoom to show all pts.
 export default function LeafletMap({
   points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
-  me, nearest, following, locked, onUnlock, focus,
+  me, nearest, following, locked, onUnlock, focus, rain,
 }) {
   const box = useRef(null)
   const map = useRef(null)
@@ -147,6 +148,18 @@ export default function LeafletMap({
     tiles.current = L.tileLayer(t.url, t.opts).addTo(map.current)
     tiles.current.bringToBack()
   }, [type])
+
+  // rain radar: one tile layer, its URL is swapped for each frame
+  const rainLayer = useRef(null)
+  const rainUrl = rain?.template ?? null
+  useEffect(() => {
+    if (!rainUrl) { rainLayer.current?.remove(); rainLayer.current = null; return }
+    if (rainLayer.current) { rainLayer.current.setUrl(rainUrl); return }
+    rainLayer.current = L.tileLayer(rainUrl, {
+      opacity: RAIN_OPACITY, maxNativeZoom: RAIN_MAX_ZOOM, maxZoom: RAIN_SHOW_MAX_ZOOM, zIndex: 10,
+      attribution: 'Radar &copy; <a href="https://www.rainviewer.com/">RainViewer</a>',
+    }).addTo(map.current)
+  }, [rainUrl])
 
   // markers (created once per point, re-used when filters change)
   useEffect(() => {

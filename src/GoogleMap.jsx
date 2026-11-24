@@ -3,6 +3,7 @@ import Supercluster from 'supercluster'
 import { GOOGLE_MAPS_KEY, pointPopupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist, stationSvg } from './mapsData'
 import { GOOGLE_MAPS_DAILY_LIMIT, takeGoogleMapLoad, consumeGoogleMapLoad } from './mapsQuota'
 import { createGlide, ACC_CIRCLE_MAX_M } from './myLocation'
+import { radarTileElement } from './rainRadar'
 
 // Distance label drawn as a small SVG pill (Google marker labels cannot have a background).
 const distIcon = (gm, text, i) => {
@@ -87,7 +88,7 @@ const clusterSize = (n) => (n < 10 ? 34 : n < 100 ? 40 : n < 1000 ? 48 : 56)
  */
 export default function GoogleMap({
   points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
-  me, nearest, following, locked, onUnlock, focus, overlays, onFail,
+  me, nearest, following, locked, onUnlock, focus, overlays, onFail, rain,
 }) {
   const box = useRef(null)
   const map = useRef(null)
@@ -251,6 +252,21 @@ export default function GoogleMap({
       if (layer.getMap() !== want) layer.setMap(want)
     }
   }, [ready, overlays])
+
+  // rain radar: a custom tile layer, replaced for each frame
+  const rainUrl = rain?.template ?? null
+  useEffect(() => {
+    if (!ready) return
+    const gm = window.google.maps
+    const layers = map.current.overlayMapTypes
+    layers.clear()
+    if (!rainUrl) return
+    layers.push({
+      tileSize: new gm.Size(256, 256), minZoom: 0, maxZoom: 19, name: 'rain',
+      getTile: (coord, zoom, doc) => radarTileElement(doc, rainUrl, coord, zoom),
+      releaseTile: () => {},
+    })
+  }, [ready, rainUrl])
 
   // (re)build the cluster index when the visible set or colors change
   useEffect(() => {

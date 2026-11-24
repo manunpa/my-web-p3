@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Search, RefreshCw, MapPin, Layers, Crosshair, X, Copy, Check, ExternalLink, AlertTriangle,
-  LocateFixed, Navigation, Fuel, Car, Bus, Bike, Eye,
+  LocateFixed, Navigation, Fuel, Car, Bus, Bike, Eye, CloudRain, Play, Pause,
 } from 'lucide-react'
+import { loadRainFrames, rainTimeLabel } from './rainRadar'
 import StreetViewPanel from './StreetViewPanel'
 import {
   loadGeofences, cachedGeofences, googleMapsLink, navLink, parseCoords, OTHER_SUPPLIER_COLOR,
@@ -116,10 +117,10 @@ export default function MapsPage() {
       const near = nearestTo(f, shownRef.current, 5)
       setFocus({ key: Date.now(), pts: [f, ...near.map((n) => n.p)] })
       const rough = f.acc > ACC_CIRCLE_MAX_M
-      say((near[0] ? `ใกล้ที่สุด: ${near[0].p.name} (${formatDist(near[0].km)})` : 'พบตำแหน่งแล้ว')
-        + (rough
-          ? ` · ตำแหน่งโดยประมาณ ±${formatDist(f.acc / 1000)} (ไม่มี GPS — บนมือถือจะแม่นกว่า)`
-          : ` · แม่นยำ ±${Math.round(f.acc)} ม. — กดปุ่มอีกครั้งเพื่อติดตามแบบเรียลไทม์`), rough ? 9000 : 6000)
+      // the nearest station is already in the bar at the top of the map, so keep this note short
+      say(rough
+        ? `ตำแหน่งโดยประมาณ ±${formatDist(f.acc / 1000)} (ไม่มี GPS — บนมือถือจะแม่นกว่า)`
+        : `แม่นยำ ±${Math.round(f.acc)} ม. · กดปุ่มอีกครั้งเพื่อติดตามเรียลไทม์`, rough ? 7000 : 5000)
     },
   })
   const me = loc.me
@@ -128,6 +129,40 @@ export default function MapsPage() {
   useEffect(() => { if (selected) setLocked(false) }, [selected]) // looking at a station: stop pulling the map back
   // typing a coordinate replaces my location
   useEffect(() => { if (typedPin && me) loc.off() }, [typedPin]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Rain radar layer: the past 2 hours, 13 frames. Frames are loaded only while the layer is on
+  // (and refreshed every 5 minutes); if loading fails the layer turns itself off.
+  const [rainOn, setRainOn] = useState(() => store.get('maps.rain', '0') === '1')
+  const [rainData, setRainData] = useState(null)
+  const [rainIdx, setRainIdx] = useState(0)
+  const [rainPlaying, setRainPlaying] = useState(false)
+  useEffect(() => { store.set('maps.rain', rainOn ? '1' : '0') }, [rainOn])
+  useEffect(() => {
+    if (!rainOn) { setRainPlaying(false); return undefined }
+    let alive = true
+    const pull = async (first) => {
+      try {
+        const d = await loadRainFrames()
+        if (!alive) return
+        setRainData(d)
+        setRainIdx((i) => (first || i >= d.frames.length ? d.frames.length - 1 : i))
+      } catch (e) {
+        if (!alive) return
+        setRainOn(false)
+        say(`โหลดเรดาร์ฝนไม่สำเร็จ (${e.message})`, 6000)
+      }
+    }
+    pull(true)
+    const t = setInterval(() => pull(false), 5 * 60 * 1000)
+    return () => { alive = false; clearInterval(t) }
+  }, [rainOn, say])
+  useEffect(() => {
+    if (!rainPlaying || !rainData) return undefined
+    const t = setInterval(() => setRainIdx((i) => (i + 1) % rainData.frames.length), 700)
+    return () => clearInterval(t)
+  }, [rainPlaying, rainData])
+  const rainFrame = rainOn && rainData ? rainData.frames[Math.min(rainIdx, rainData.frames.length - 1)] : null
+  const rain = useMemo(() => (rainFrame ? { template: rainFrame.template } : null), [rainFrame])
 
   // Street View panel (opens over the map; each opening is counted by streetViewQuota.js)
   const [sv, setSv] = useState(null)
@@ -289,7 +324,7 @@ export default function MapsPage() {
 
   const mapProps = {
     points: shown, colorOf, selected, onSelect: setSelected, type, view: view.current, onView, fitKey, pin,
-    me, nearest, following, locked: following && locked, onUnlock: () => setLocked(false), focus,
+    me, nearest, following, locked: following && locked, onUnlock: () => setLocked(false), focus, rain,
   }
 
   return (
@@ -506,6 +541,10 @@ export default function MapsPage() {
               )}
 
               <div className="map-tools">
+                <button type="button" className={`loc-btn${rainOn ? ' follow rain-on' : ''}`} aria-pressed={rainOn}
+                  onClick={() => setRainOn((v) => !v)} title={rainOn ? 'ปิดเรดาร์ฝน' : 'เรดาร์ฝน (ย้อนหลัง 2 ชั่วโมง)'} aria-label="เรดาร์ฝน">
+                  <CloudRain size={19} />
+                </button>
                 {following && !locked && (
                   <button type="button" className="loc-btn recenter" onClick={() => setLocked(true)}
                     title="กลับมาที่ตำแหน่งของฉัน" aria-label="กลับมาที่ตำแหน่งของฉัน">
@@ -523,7 +562,24 @@ export default function MapsPage() {
             </>
           )}
           {sv && <StreetViewPanel at={sv} onClose={() => setSv(null)} />}
-          {note && <div className="map-note" role="status">{note.text}</div>}
+          {/* Bottom-center items stack on their own, so they never sit on top of each other. */}
+          <div className="map-stack">
+            {note && <div className="map-note" role="status">{note.text}</div>}
+            {rainOn && rainData && rainFrame && (
+              <div className="rain-bar" role="group" aria-label="เรดาร์ฝน">
+                <button type="button" className="rain-play" onClick={() => setRainPlaying((p) => !p)}
+                  aria-label={rainPlaying ? 'หยุดเล่น' : 'เล่นย้อนหลัง 2 ชั่วโมง'} title={rainPlaying ? 'หยุดเล่น' : 'เล่นย้อนหลัง 2 ชั่วโมง'}>
+                  {rainPlaying ? <Pause size={15} /> : <Play size={15} />}
+                </button>
+                <input type="range" min={0} max={rainData.frames.length - 1} value={Math.min(rainIdx, rainData.frames.length - 1)}
+                  onChange={(e) => { setRainPlaying(false); setRainIdx(Number(e.target.value)) }} aria-label="เวลาของเรดาร์ฝน" />
+                <span className="rain-time">
+                  {rainTimeLabel(rainFrame.time)} น.{rainIdx >= rainData.frames.length - 1 ? ' · ล่าสุด' : ''}
+                </span>
+                <a className="rain-credit" href={rainData.credit.url} target="_blank" rel="noopener noreferrer">{rainData.credit.name}</a>
+              </div>
+            )}
+          </div>
           {data.status === 'loading' && <div className="map-msg"><MapPin size={18} /> กำลังโหลดพิกัด…</div>}
           {data.error && data.status === 'ready' && <div className="map-toast">โหลดข้อมูลล่าสุดไม่สำเร็จ แสดงข้อมูลชุดก่อนหน้า</div>}
         </section>

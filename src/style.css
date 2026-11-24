@@ -476,6 +476,24 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .gm-style .mpop-btn{background:#f4f4f5;border-color:#d4d4d8;color:#111!important}
 .gm-style .mpop-btn.primary{background:#1a73e8;border-color:#1a73e8;color:#fff!important}
 @media (max-width:900px){.map-tools{bottom:100px}}
+/* Rain radar bar */
+.loc-btn.rain-on{background:#0a7ea4;border-color:#0a7ea4;box-shadow:0 0 0 4px #0a7ea433,0 4px 14px rgba(0,0,0,.35)}
+.map-stack{position:absolute;z-index:650;left:50%;bottom:30px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;width:max-content;max-width:calc(100% - 24px);pointer-events:none}
+.map-stack>*{pointer-events:auto}
+.map-stack .map-note{position:static;transform:none;animation:none}
+.rain-bar{display:flex;align-items:center;gap:8px;max-width:100%;padding:5px 10px 5px 5px;border-radius:12px;background:rgb(var(--surface-2) / .95);border:1px solid var(--line);color:var(--text);font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+.rain-bar .rain-play{flex:none;display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:8px;background:#0a7ea4;color:#fff;cursor:pointer}
+.rain-bar input[type=range]{width:min(130px,28vw);accent-color:#0a7ea4}
+.rain-bar .rain-time{flex:none;font-variant-numeric:tabular-nums;white-space:nowrap}
+.rain-bar .rain-credit{flex:none;color:var(--muted);font-size:11px}
+[data-theme="light"] .rain-bar{background:rgba(255,255,255,.95)}
+/* Narrow screens: bottom items leave the right column (zoom + buttons) free, and the top bar
+   leaves room for the floating Session timer in the top-right corner. */
+@media (max-width:900px){
+  .map-stack{left:12px;right:64px;transform:none;width:auto;max-width:none;align-items:stretch}
+  .rain-bar input[type=range]{flex:1;width:auto;min-width:50px}
+  .near-bar{left:12px;transform:none;max-width:calc(100% - 170px)}
+}
 /* Street View panel over the map */
 .map-canvas{isolation:isolate} /* keep the map's own controls (z-index 1000) under the Street View panel */
 .sv-panel{position:absolute;inset:0;z-index:640;display:flex;flex-direction:column;background:var(--map-bg)}
