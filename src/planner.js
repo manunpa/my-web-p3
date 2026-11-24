@@ -68,6 +68,22 @@ export function bestOrder(dur) {
   return bestPath
 }
 
+/* ---- truck times ---- */
+
+/**
+ * When the truck is at each stop: the departure time, then every leg takes its km / speed.
+ * (The route server drives like a car; the company's truck speeds come from planTiming.js.)
+ * legsKm: km of each leg between two stops, speedKmh -> [ms at stop 0, ms at stop 1, ...]
+ */
+export function etaTimes(departMs, legsKm, speedKmh) {
+  const out = [departMs]
+  for (const km of legsKm) out.push(out[out.length - 1] + Math.round((km / speedKmh) * 60) * 60000)
+  return out
+}
+
+/** Driving minutes of a distance at the truck speed. */
+export const truckMinutes = (km, speedKmh) => (km / speedKmh) * 60
+
 /* ---- via points: dragging the route to make it go where a truck can really drive ---- */
 
 export const MAX_VIAS = 10

@@ -11,9 +11,18 @@ const SHOW = 25
  * the fuel stations that are near it). Stops come from the "add to plan" button of a selected point;
  * the first stop is the start.
  */
+const clock = new Intl.DateTimeFormat('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' })
+const dayKey = (ms) => new Date(ms + 7 * 3600000).toISOString().slice(0, 10)
+// "10:40" or "10:40 (+1 วัน)" when it is after the day of departure
+function timeLabel(ms, departMs) {
+  const days = Math.round((Date.parse(dayKey(ms)) - Date.parse(dayKey(departMs))) / 86400000)
+  return `${clock.format(new Date(ms))}${days > 0 ? ` (+${days} วัน)` : ''}`
+}
+
 export default function RoutePlanner({
   stops, open, onToggle, busy, hasMe, onAddMe, onAddCoord, onRemove, onClear, onOptimize, onBuild, onFuel,
   route, along, radiusKm, googleLink, onPick, colorOf, fuelLoading, focus, onFocus, vias, onRemoveVia, onClearVias,
+  truck, onTruck, departAt, onDepart, trip, base,
 }) {
   const [limit, setLimit] = useState(SHOW)
   const [coord, setCoord] = useState('')
@@ -37,7 +46,12 @@ export default function RoutePlanner({
               <li>
                 <span className="stop-n">{i + 1}</span>
                 <span className="stop-name" title={s.name}>{s.name}</span>
-                {route?.legs?.[i - 1] && <em className="stop-leg">{route.legs[i - 1].km.toFixed(1)} กม. · {formatMin(route.legs[i - 1].min)}</em>}
+                {trip && i === 0 && <em className="stop-leg">ออก {timeLabel(trip.times[0], trip.times[0])}</em>}
+                {trip && i > 0 && route?.legs?.[i - 1] && (
+                  <em className="stop-leg" title={`${route.legs[i - 1].km.toFixed(1)} กม. ที่ ${truck.speed} กม./ชม.`}>
+                    {route.legs[i - 1].km.toFixed(1)} กม. · {formatMin(trip.legMin[i - 1])} · ถึง <b>{timeLabel(trip.times[i], trip.times[0])}</b>
+                  </em>
+                )}
                 <button type="button" className="x" onClick={() => onRemove(i)} aria-label={`เอา ${s.name} ออกจากแผน`}><X size={14} /></button>
               </li>
               {/* the via points dragged onto the route, between this stop and the next */}
@@ -85,10 +99,48 @@ export default function RoutePlanner({
           </p>
         )}
 
+        {route && trip && (
+          <div className="planner-truck">
+            <div className="truck-row" role="radiogroup" aria-label="ประเภทรถ">
+              <span className="muted">รถ</span>
+              {truck.options.map((o) => (
+                <button key={o.type} type="button" role="radio" aria-checked={truck.type === o.type && !truck.known}
+                  className={truck.type === o.type ? 'on' : ''} disabled={truck.known} onClick={() => onTruck({ type: o.type })}
+                  title={`${o.label} ความเร็วเฉลี่ย ${o.speed} กม./ชม. (ตามเกณฑ์ในหน้าเอกสาร)`}>{o.label} {o.speed}</button>
+              ))}
+              <input type="text" className="truck-plate" value={truck.plate} onChange={(e) => onTruck({ plate: e.target.value })}
+                placeholder="ทะเบียน เช่น 79-5846" aria-label="ทะเบียนรถ (ไม่บังคับ)" />
+            </div>
+            {truck.plate.trim() && (
+              <p className="muted truck-note">
+                {truck.known ? `พบทะเบียน ${truck.plate.trim()} → ${truck.label} ${truck.speed} กม./ชม.` : 'ไม่พบทะเบียนในข้อมูลรถ ใช้ประเภทที่เลือกไว้'}
+              </p>
+            )}
+            <label className="truck-row">
+              <span className="muted">ออกเดินทาง</span>
+              <input type="datetime-local" value={departAt} onChange={(e) => onDepart(e.target.value)} aria-label="วันและเวลาออกเดินทาง" />
+            </label>
+          </div>
+        )}
+
         {route && (
           <p className="planner-sum">
-            รวม <b>{route.km.toFixed(1)} กม.</b> · <b>{formatMin(route.min)}</b>
-            <span className="muted"> (รถยนต์ ไม่รวมรถติด รถบรรทุกจะช้ากว่า) · เส้นทางจาก <a href={OSRM_CREDIT.url} target="_blank" rel="noopener noreferrer">{OSRM_CREDIT.name}</a></span>
+            รวม <b>{route.km.toFixed(1)} กม.</b> · ขับ <b>{formatMin(trip ? trip.totalMin : route.min)}</b>
+            {trip && <span className="muted"> ({truck.label} {truck.speed} กม./ชม. ตามเกณฑ์ในหน้าเอกสาร · ถึงปลายทาง <b>{timeLabel(trip.times[trip.times.length - 1], trip.times[0])}</b>)</span>}
+            <span className="muted"> · ยังไม่รวมเวลาโหลด พัก และลงของ</span>
+            <br />
+            <span className="muted">
+              บริการเส้นทางคิดแบบรถยนต์ {formatMin(route.min)} · เส้นทางจาก <a href={OSRM_CREDIT.url} target="_blank" rel="noopener noreferrer">{OSRM_CREDIT.name}</a>
+            </span>
+            {base && vias.length > 0 && (
+              <>
+                <br />
+                <span className="muted">
+                  เทียบกับเส้นที่ระบบเสนอ: {route.km - base.km >= 0 ? '+' : ''}{(route.km - base.km).toFixed(1)} กม.
+                  {trip && <> · {route.km - base.km >= 0 ? '+' : '−'}{formatMin(Math.abs(trip.totalMin - (base.km / truck.speed) * 60))}</>}
+                </span>
+              </>
+            )}
           </p>
         )}
 

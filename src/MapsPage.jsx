@@ -8,7 +8,9 @@ import { loadRainFrames, rainTimeLabel, lagLabel } from './rainRadar'
 import { driveTable, driveRoute, driveMatrix, driveRouteVia, formatMin, OSRM_CREDIT } from './routing'
 import {
   alongRoute, bestOrder, googleDirections, MAX_STOPS, MAX_VIAS, waypointsOf, mainLegs, locateOnRoute, insertVia, splitLeg,
+  etaTimes, truckMinutes,
 } from './planner'
+import { SPEED, TYPE_LABEL, vehicleOf } from './planTiming'
 import RoutePlanner from './RoutePlanner'
 import StreetViewPanel from './StreetViewPanel'
 import {
@@ -370,7 +372,37 @@ export default function MapsPage() {
     [showSt, st.points, hiddenBrands, matches])
   const shownPlat = useMemo(() => (showOff && showPlat ? off.platforms.filter(matches) : []), [showOff, showPlat, off.platforms, matches])
   // Route planner: stops (the first is the start), the planned route and the fuel stations near it.
-  const [plan, setPlan] = useState({ stops: [], vias: [], route: null, along: null })
+  const [plan, setPlan] = useState({ stops: [], vias: [], route: null, along: null, base: null })
+  // The truck for the times: the company's speeds (planTiming.js, the same as the Documents page).
+  // A plate found in the vehicle list decides the type; otherwise the type picked here (default: the
+  // slower tractor + trailer, like the Documents page does for an unknown plate).
+  const [truck, setTruckState] = useState(() => {
+    try { const s = JSON.parse(localStorage.getItem('maps.truck') || 'null'); return { type: s?.type === '10W' ? '10W' : 'SEMI', plate: String(s?.plate ?? '') } } catch { return { type: 'SEMI', plate: '' } }
+  })
+  const setTruck = (patch) => setTruckState((t) => { const n = { ...t, ...patch }; store.set('maps.truck', JSON.stringify(n)); return n })
+  const [departAt, setDepartAt] = useState(() => {
+    const d = new Date(Math.ceil((Date.now() + 5 * 60000) / (15 * 60000)) * 15 * 60000) // the next quarter hour
+    const p = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+  })
+  const veh = vehicleOf(truck.plate)
+  const truckType = veh?.type ?? truck.type
+  const truckInfo = {
+    ...truck, known: !!veh, type: truckType, speed: SPEED[truckType], label: TYPE_LABEL[truckType],
+    options: Object.keys(SPEED).map((type) => ({ type, speed: SPEED[type], label: TYPE_LABEL[type] })),
+  }
+  // Driving time of each leg and the time at each stop, at the truck speed (not the car time of the route server).
+  const trip = useMemo(() => {
+    const departMs = Date.parse(departAt)
+    if (!plan.route?.legs?.length || !Number.isFinite(departMs)) return null
+    const speed = SPEED[truckType]
+    const legKm = plan.route.legs.map((l) => l.km)
+    return {
+      times: etaTimes(departMs, legKm, speed),
+      legMin: legKm.map((km) => truckMinutes(km, speed)),
+      totalMin: truckMinutes(plan.route.km, speed),
+    }
+  }, [plan.route, departAt, truckType])
   const [planOpen, setPlanOpen] = useState(false)
   const [planBusy, setPlanBusy] = useState(false)
   const [alongLoading, setAlongLoading] = useState(false)
@@ -528,7 +560,7 @@ export default function MapsPage() {
   const setStops = (fn) => setPlan((pl) => {
     const next = fn(pl.stops)
     const appended = next.length >= pl.stops.length && pl.stops.every((s, i) => next[i] === s)
-    return { stops: next, vias: appended ? pl.vias : [], route: null, along: null }
+    return { stops: next, vias: appended ? pl.vias : [], route: null, along: null, base: null }
   })
   const addStop = (s) => {
     if (plan.stops.length >= MAX_STOPS) { say(`เพิ่มได้สูงสุด ${MAX_STOPS} จุด`, 3500); return }
@@ -555,7 +587,7 @@ export default function MapsPage() {
     if (plan.vias.length) say('เอาจุดแวะออก จึงล้างจุดผ่านที่ลากไว้ด้วย ลากปรับเส้นทางใหม่ได้', 4500)
     setStops((st0) => st0.filter((_, k) => k !== i))
   }
-  const clearPlan = () => setPlan({ stops: [], vias: [], route: null, along: null })
+  const clearPlan = () => setPlan({ stops: [], vias: [], route: null, along: null, base: null })
 
   // Put the stops after the first one in the order with the least driving time (one OSRM call).
   const optimizePlan = async () => {
@@ -594,7 +626,8 @@ export default function MapsPage() {
       const rt = await driveRouteVia(pts)
       const route = { ...rt, subLegs: rt.legs, legs: mainLegs(rt.legs, isVia), editable: true, keepView }
       const along = plan.along ? await alongFor(route, plan.along.radiusKm) : null // keep the fuel list up to date
-      setPlan((pl) => ({ ...pl, vias, route, along }))
+      // the first route made with no via points is what the system suggests, kept to compare with the adjusted one
+      setPlan((pl) => ({ ...pl, vias, route, along, base: vias.length ? pl.base : { km: route.km, min: route.min } }))
       setDrive((d) => (d ? { ...d, route: null } : d)) // one route on the map at a time
     } catch (e) {
       const w = e.waypoint
@@ -784,6 +817,7 @@ export default function MapsPage() {
             onRemove={removeStop} onClear={clearPlan} onOptimize={optimizePlan} onBuild={buildPlan} onFuel={planFuel}
             route={plan.route} along={plan.along} radiusKm={plan.along?.radiusKm ?? (plan.route?.km > 200 ? 2 : 5)} googleLink={googleLink}
             vias={plan.vias} onRemoveVia={removeVia} onClearVias={clearVias}
+            truck={truckInfo} onTruck={setTruck} departAt={departAt} onDepart={setDepartAt} trip={trip} base={plan.base}
             onPick={pickAlong} colorOf={colorOf} fuelLoading={alongLoading}
           />
 
@@ -1005,10 +1039,12 @@ export default function MapsPage() {
                 <Car size={14} />
                 <span className="route-text">
                   {plan.route
-                    ? <>แผนเส้นทาง {plan.stops.length} จุด · {plan.route.km.toFixed(1)} กม. · {formatMin(plan.route.min)}</>
+                    ? <>แผนเส้นทาง {plan.stops.length} จุด · {plan.route.km.toFixed(1)} กม. · {formatMin(trip ? trip.totalMin : plan.route.min)}</>
                     : <>ขับไป <b>{drive.route.name}</b> · {drive.route.km.toFixed(1)} กม. · {formatMin(drive.route.min)}</>}
                 </span>
-                <span className="route-note" title="คำนวณสำหรับรถยนต์บนถนน OpenStreetMap ไม่รวมรถติด รถบรรทุกจะช้ากว่า">โดยประมาณ</span>
+                <span className="route-note" title={plan.route
+                  ? `เวลาคิดจากความเร็ว ${truckInfo.label} ${truckInfo.speed} กม./ชม. ตามเกณฑ์ในหน้าเอกสาร ไม่รวมเวลาโหลด พัก และลงของ`
+                  : 'คำนวณสำหรับรถยนต์บนถนน OpenStreetMap ไม่รวมรถติด รถบรรทุกจะช้ากว่า'}>{plan.route ? `${truckInfo.label} ${truckInfo.speed}` : 'โดยประมาณ'}</span>
                 <a className="route-credit" href={OSRM_CREDIT.url} target="_blank" rel="noopener noreferrer">{OSRM_CREDIT.name}</a>
                 <button type="button" className="x" aria-label="ซ่อนเส้นทาง"
                   onClick={() => (plan.route ? setPlan((pl) => ({ ...pl, route: null, along: null })) : setDrive((d) => (d ? { ...d, route: null } : d)))}>

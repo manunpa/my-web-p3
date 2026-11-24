@@ -515,6 +515,15 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .planner-add .more:disabled{opacity:.5;cursor:not-allowed}
 .planner-focus{display:flex;align-items:flex-start;gap:7px;font-size:12px;line-height:1.4;cursor:pointer}
 .planner-focus input{margin-top:2px}
+.planner-truck{display:grid;gap:6px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:rgb(var(--glow) / .05)}
+.truck-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px}
+.truck-row button{height:26px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:none;color:var(--text);font:inherit;font-size:11.5px;cursor:pointer}
+.truck-row button.on{background:#1a73e8;border-color:#1a73e8;color:#fff}
+.truck-row button:disabled{opacity:.55;cursor:default}
+.truck-row input{height:28px;padding:0 8px;border-radius:8px;border:1px solid var(--line);background:var(--field);color:var(--text);font:inherit;font-size:12px}
+.truck-row .truck-plate{min-width:0;flex:1 1 130px}
+.truck-note{margin:0;font-size:11.5px}
+.stop-leg b{color:var(--text)}
 .via-row{padding-left:6px;color:var(--muted)}
 .via-row .via-dot{flex:none;width:12px;height:12px;margin:0 4px;border-radius:50%;background:#fff;border:3px solid #1a73e8;box-sizing:border-box}
 .link-btn{padding:0;border:0;background:none;color:var(--gold-text);font:inherit;text-decoration:underline;cursor:pointer}
