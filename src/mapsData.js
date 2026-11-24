@@ -10,6 +10,11 @@ import { fetchProtectedJson } from './protectedFetch'
 export const GEOFENCE_API_URL =
   'https://script.google.com/macros/s/AKfycbyZFJgBnwq8u-8ND1zQo9T9tJ6XuGX5ZXIAeip2EkI6uNf7eZOhIqAjU435doLMtABf/exec'
 
+// Fuel stations of every brand (Google Sheet stations_all_brands, one tab per brand).
+// Same login check (code: my-website-pm/apps-script/stations.gs, shared with my-website-pm).
+export const STATIONS_API_URL =
+  'https://script.google.com/macros/s/AKfycbx2TJEkaUdHu5gYck2T5YRsqCdfxFob8pTq78ehlhYgXsEV7oxEkYc5Dz3h3AQ1r40zNQ/exec'
+
 // Google Maps JavaScript API key. A browser key is always visible to visitors, so it MUST be
 // restricted in Google Cloud Console -> Credentials -> this key:
 //   Application restrictions: Websites -> manunpa.github.io/* and localhost:5173/*
@@ -99,6 +104,105 @@ async function fetchGeofences() {
 
   return { points: valid, invalid, suppliers }
 }
+
+/* ---------- fuel stations ---------- */
+
+// Brand colors (same as the PM maps page). New brands get a spare color.
+const BRAND_COLORS = { PTT: '#00a3e0', PT: '#66a80f', Shell: '#f7c600', Caltex: '#b02a37' }
+const SPARE_BRAND_COLORS = ['#1098ad', '#d9480f', '#5c940d', '#9c36b5', '#364fc7', '#c92a2a']
+export const fuelInk = (color) => (color === '#f7c600' ? '#3d2e00' : '#fff')
+
+// Shell lists its services as English codes -> Thai; '' = not worth showing.
+const AMENITY_TH = {
+  air_and_water: 'เติมลม/น้ำ', twenty_four_hour: 'เปิด 24 ชม.', full_service: 'มีพนักงานเติมน้ำมัน',
+  standard_toilet: 'ห้องน้ำ', disabled_facilities: 'ห้องน้ำผู้พิการ', carwash: 'ล้างรถ', service_bay: 'ช่องบริการรถ',
+  quick_lubes: 'เปลี่ยนน้ำมันเครื่อง', high_speed_diesel_pump: 'หัวจ่ายดีเซลความเร็วสูง', motorway_service: 'จุดพักทางหลวง',
+  selectshop: 'Shell Select', stop_and_shop: 'ร้านสะดวกซื้อ', clubsmart_shop: 'ร้านค้า ClubSmart', city_market: 'ร้านค้า',
+  food_offerings: 'อาหาร', fast_food: 'อาหาร', snack_food: 'อาหาร', deli_cafe: 'คาเฟ่', cafe: 'คาเฟ่',
+  atm: 'ATM', atm_in: 'ATM', atm_out: 'ATM',
+  clubsmart_card: 'บัตร ClubSmart', go_plus: 'Shell GO+', loyalty_cards: 'บัตรสะสมแต้ม', partner_loyalty_accepted: 'บัตรสะสมแต้มพันธมิตร',
+  fuel_card: 'บัตรน้ำมัน', shell_card: 'Shell Card', fleet_card_general: 'บัตร Fleet',
+  credit_card: 'บัตรเครดิต', credit_card_general: 'บัตรเครดิต', credit_card_visa: 'Visa', credit_card_mastercard: 'Mastercard',
+  credit_card_american_express: 'Amex',
+  manned: '', manual: '', loyalty_program: '', other_loyalty_cards: '', parking_lanes: '', type_of_parking: '',
+}
+const splitList = (v) => String(v ?? '').split(/\s*,\s*/).map((s) => s.trim()).filter(Boolean)
+const amenities = (v) => [...new Set(splitList(v).map((k) => (/^[a-z0-9_]+$/.test(k)
+  ? (k in AMENITY_TH ? AMENITY_TH[k] : k.replace(/_/g, ' ')) : k)).filter(Boolean))]
+
+// Only loaded when the fuel-station layer is turned on; kept for this visit only
+// (about 5,500 stations with details is too big for the browser's saved storage).
+let stationsMemory = null
+export const cachedStations = () => stationsMemory
+
+export async function loadStations() {
+  let json
+  try {
+    json = await fetchProtectedJson(STATIONS_API_URL)
+  } catch (e) {
+    throw new Error(`โหลดข้อมูลปั๊มน้ำมันไม่สำเร็จ (${e.message})`)
+  }
+  const rows = Array.isArray(json) ? json : (json.data ?? json.rows ?? [])
+  const txt = (v) => String(v ?? '').trim()
+  const points = []
+  rows.forEach((r, i) => {
+    const lat = num(pick(r, 'lat', 'Latitude')), lng = num(pick(r, 'lng', 'Longitude'))
+    if (!(Number.isFinite(lat) && Number.isFinite(lng)
+      && lat >= BOUNDS.latMin && lat <= BOUNDS.latMax && lng >= BOUNDS.lngMin && lng <= BOUNDS.lngMax)) return
+    const brand = txt(r._sheet) || 'PTT'
+    points.push({
+      id: `s${i}`, kind: 'station', supplier: brand, lat, lng,
+      name: txt(pick(r, 'name')).replace(/\s+/g, ' ') || `ปั๊ม ${brand}`,
+      station: {
+        type: txt(pick(r, 'type')),
+        address: [txt(pick(r, 'address')), txt(pick(r, 'postcode'))].filter(Boolean).join(' ').replace(/\s+/g, ' '),
+        where: [txt(pick(r, 'district', 'city')), txt(pick(r, 'province_name', 'province'))].filter(Boolean).join(' · '),
+        phone: txt(pick(r, 'phone')),
+        hours: txt(pick(r, 'hours')),
+        products: splitList(pick(r, 'products', 'fuels')),
+        services: amenities(pick(r, 'services', 'amenities')),
+        cards: txt(pick(r, 'card_type')),
+        link: txt(pick(r, 'link')),
+      },
+    })
+  })
+  const counts = new Map()
+  for (const p of points) counts.set(p.supplier, (counts.get(p.supplier) || 0) + 1)
+  let spare = 0
+  const brands = [...counts].sort((a, b) => b[1] - a[1]).map(([name, mapped]) => ({
+    name, mapped, color: BRAND_COLORS[name] ?? SPARE_BRAND_COLORS[spare++ % SPARE_BRAND_COLORS.length],
+  }))
+  stationsMemory = { points, brands, at: Date.now() }
+  return stationsMemory
+}
+
+// Fuel pump glyph, used inside the brand-colored station markers.
+export const FUEL_PATH = 'M5 3h8a1 1 0 0 1 1 1v7h1.5a2 2 0 0 1 2 2v4.5a1 1 0 0 0 2 0V9.2L17.3 7l1.4-1.4 2.6 2.6c.2.2.3.4.3.7v8.6a3 3 0 0 1-6 0V13H14v8H4V4a1 1 0 0 1 1-1zm1 2v5h6V5H6z'
+export const stationSvg = (color, size = 22) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24">`
+  + `<circle cx="12" cy="12" r="11" fill="${color}" stroke="#fff" stroke-width="1.6"/>`
+  + `<g transform="translate(5.5 5.5) scale(.54)" fill="${fuelInk(color)}"><path d="${FUEL_PATH}"/></g></svg>`
+
+export function stationPopupHtml(p, color) {
+  const d = p.station
+  const line = (label, v) => (v ? `<span><b>${label}</b> ${escapeHtml(v)}</span>` : '')
+  const chips = (list) => (list.length ? `<div class="mpop-chips">${list.map((x) => `<i>${escapeHtml(x)}</i>`).join('')}</div>` : '')
+  let host = ''
+  try { host = /^https?:\/\//.test(d.link) ? new URL(d.link).hostname.replace(/^www\./, '') : '' } catch { /* bad link */ }
+  return `<div class="mpop">
+    <div class="mpop-sup"><span class="mpop-brand" style="background:${color};color:${fuelInk(color)}">⛽ ${escapeHtml(p.supplier)}</span>${d.type ? escapeHtml(d.type) : ''}</div>
+    <strong>${escapeHtml(p.name)}</strong>
+    <code>${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</code>
+    ${line('พื้นที่', d.where)}${line('ที่อยู่', d.address)}${line('โทร', d.phone)}${line('เวลาเปิด', d.hours)}
+    ${d.products.length ? `<span class="mpop-sec">น้ำมัน / ผลิตภัณฑ์</span>${chips(d.products)}` : ''}
+    ${d.services.length ? `<span class="mpop-sec">บริการในสถานี</span>${chips(d.services)}` : ''}
+    ${line('บัตรที่รับ', d.cards)}
+    ${host ? `<a href="${escapeHtml(d.link)}" target="_blank" rel="noopener">ดูหน้าสถานีบน ${escapeHtml(host)} ↗</a>` : ''}
+    ${popupActions(p)}
+  </div>`
+}
+
+// popup for any point on the map (geofence or fuel station)
+export const pointPopupHtml = (p, color) => (p.kind === 'station' ? stationPopupHtml(p, color) : popupHtml(p, color))
 
 export const googleMapsLink = (p) => `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`
 

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Search, RefreshCw, MapPin, Layers, Crosshair, X, Copy, Check, ExternalLink, AlertTriangle,
-  LocateFixed, Navigation,
+  LocateFixed, Navigation, Fuel,
 } from 'lucide-react'
 import {
   loadGeofences, cachedGeofences, googleMapsLink, navLink, parseCoords, OTHER_SUPPLIER_COLOR,
-  distanceKm, nearestTo, formatDist,
+  distanceKm, nearestTo, formatDist, loadStations, cachedStations, fuelInk,
 } from './mapsData'
 import { useMyLocation } from './myLocation'
 import LeafletMap from './LeafletMap'
@@ -129,6 +129,27 @@ export default function MapsPage() {
     return () => document.removeEventListener('click', onClick)
   }, [say])
 
+  // Fuel-station layer (all brands). Off by default; loaded the first time it is turned on.
+  const [showSt, setShowSt] = useState(() => store.get('maps.stations', '0') === '1')
+  const [st, setSt] = useState(() => {
+    const c = cachedStations()
+    return c ? { status: 'ready', ...c } : { status: 'idle', points: [], brands: [] }
+  })
+  const [hiddenBrands, setHiddenBrands] = useState(() => new Set())
+  const loadSt = useCallback(async () => {
+    setSt((s) => ({ ...s, status: 'loading' }))
+    try {
+      setSt({ status: 'ready', ...await loadStations() })
+    } catch (e) {
+      setSt((s) => ({ ...s, status: s.points.length ? 'ready' : 'error' }))
+      say(e.message, 6000)
+    }
+  }, [say])
+  useEffect(() => {
+    store.set('maps.stations', showSt ? '1' : '0')
+    if (showSt && (st.status === 'idle' || st.status === 'error')) loadSt()
+  }, [showSt]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const load = useCallback(async () => {
     setBusy(true)
     try {
@@ -142,6 +163,7 @@ export default function MapsPage() {
     }
   }, [])
   useEffect(() => { load() }, [load])
+  const reload = () => { load(); if (showSt) loadSt() }
 
   // Fetch the Google Maps script in the background so switching to it is quick.
   // (Loading the script is free; only creating a map counts as a map load.)
@@ -159,20 +181,29 @@ export default function MapsPage() {
     setFitKey(0) // keep the current view when switching
   }
 
-  const colors = useMemo(() => new Map(data.suppliers.map((s) => [s.name, s.color])), [data.suppliers])
+  const colors = useMemo(() => new Map([...data.suppliers, ...st.brands].map((s) => [s.name, s.color])), [data.suppliers, st.brands])
   const colorOf = useCallback((name) => colors.get(name) ?? OTHER_SUPPLIER_COLOR, [colors])
 
   const term = typedPin ? '' : q.trim().toLowerCase() // a coordinate search shows every station, nearest first
   const matches = useCallback((p) => !term || p.name.toLowerCase().includes(term) || p.supplier.toLowerCase().includes(term)
-    || `${p.lat},${p.lng}`.includes(term), [term])
+    || `${p.lat},${p.lng}`.includes(term)
+    || (p.station && `${p.station.where} ${p.station.address}`.toLowerCase().includes(term)), [term])
 
-  // Points drawn on the map: supplier toggles + search.
-  const shown = useMemo(() => data.points.filter((p) => !hidden.has(p.supplier) && matches(p)), [data.points, hidden, matches])
-  shownRef.current = shown
+  // Points drawn on the map: supplier / brand toggles + search.
+  const shownGeo = useMemo(() => data.points.filter((p) => !hidden.has(p.supplier) && matches(p)), [data.points, hidden, matches])
+  const shownSt = useMemo(() => (showSt ? st.points.filter((p) => !hiddenBrands.has(p.supplier) && matches(p)) : []),
+    [showSt, st.points, hiddenBrands, matches])
+  const shown = useMemo(() => (shownSt.length ? [...shownGeo, ...shownSt] : shownGeo), [shownGeo, shownSt])
 
-  // The 5 closest stations to my location (or the searched coordinate): dashed lines on the map.
+  // The 5 closest customer stations to my location (or the searched coordinate): dashed lines on
+  // the map. With every customer station hidden, the 5 closest fuel stations instead. With both
+  // layers showing, the closest fuel station is added to the "nearest" bar.
+  const nearPool = shownGeo.length ? shownGeo : shownSt
+  shownRef.current = nearPool
   const lineFrom = me ?? pin
-  const nearest = useMemo(() => (lineFrom ? nearestTo(lineFrom, shown, 5) : []), [lineFrom, shown])
+  const nearest = useMemo(() => (lineFrom ? nearestTo(lineFrom, nearPool, 5) : []), [lineFrom, nearPool])
+  const nearestPump = useMemo(() => (lineFrom && shownGeo.length && shownSt.length ? nearestTo(lineFrom, shownSt, 1)[0] : null),
+    [lineFrom, shownGeo.length, shownSt])
 
   // Points listed in the sidebar: same, optionally only inside the visible map area (nearest first).
   // With my location or a searched coordinate, distances are measured from it instead of the map center.
@@ -184,7 +215,7 @@ export default function MapsPage() {
     return origin ? [...inside].sort((a, b) => distKm(origin, a) - distKm(origin, b)) : inside
   }, [shown, inView, bounds, origin])
 
-  useEffect(() => setLimit(PAGE), [q, hidden, inView, pin, !me]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setLimit(PAGE), [q, hidden, hiddenBrands, showSt, inView, pin, !me]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onView = useCallback((v, b) => { view.current = v; setBounds(b); setCenter({ lat: v.lat, lng: v.lng }) }, [])
 
@@ -194,6 +225,12 @@ export default function MapsPage() {
     return n
   })
   const only = (name) => setHidden(new Set(data.suppliers.map((s) => s.name).filter((s) => s !== name)))
+  const toggleBrand = (name) => setHiddenBrands((h) => {
+    const n = new Set(h)
+    n.has(name) ? n.delete(name) : n.add(name)
+    return n
+  })
+  const onlyBrand = (name) => setHiddenBrands(new Set(st.brands.map((s) => s.name).filter((s) => s !== name)))
 
   const copy = async (p) => {
     if (!await copyText(`${p.lat}, ${p.lng}`)) { say('คัดลอกไม่สำเร็จ ลองกดค้างที่พิกัดเพื่อคัดลอกเอง', 2500); return }
@@ -218,6 +255,7 @@ export default function MapsPage() {
           <p className="sub">
             {data.status === 'ready'
               ? `${nf.format(data.points.length)} จุดบนแผนที่ · ${data.suppliers.length} ผู้ให้บริการ`
+                + (showSt && st.points.length ? ` · ปั๊มน้ำมัน ${nf.format(st.points.length)} แห่ง` : '')
               : 'ข้อมูลพิกัดจาก Google Sheet'}
             {data.at && ` · อัปเดต ${new Date(data.at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`}
           </p>
@@ -249,8 +287,9 @@ export default function MapsPage() {
                 onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && setPin(typedPin)}
                 aria-label="ค้นหาสถานีหรือพิกัด" />
             </label>
-            <button type="button" className="icon-btn" onClick={load} disabled={busy} title="โหลดข้อมูลใหม่" aria-label="โหลดข้อมูลใหม่">
-              <RefreshCw size={16} className={busy ? 'spin' : ''} />
+            <button type="button" className="icon-btn" onClick={reload} disabled={busy || st.status === 'loading'}
+              title="โหลดข้อมูลใหม่" aria-label="โหลดข้อมูลใหม่">
+              <RefreshCw size={16} className={busy || st.status === 'loading' ? 'spin' : ''} />
             </button>
           </div>
 
@@ -266,6 +305,27 @@ export default function MapsPage() {
             ))}
             {hidden.size > 0 && (
               <button type="button" className="sup reset" onClick={() => setHidden(new Set())}>แสดงทั้งหมด</button>
+            )}
+          </div>
+
+          <div className="sup-list st-list" role="group" aria-label="ชั้นปั๊มน้ำมัน (คลิกแบรนด์เพื่อซ่อน/แสดง, ดับเบิลคลิกเพื่อเลือกแบรนด์เดียว)">
+            <button type="button" className={`sup st-toggle${showSt ? ' on' : ''}`} aria-pressed={showSt}
+              onClick={() => setShowSt((v) => !v)} title={showSt ? 'ซ่อนปั๊มน้ำมัน' : 'แสดงปั๊มน้ำมันทุกแบรนด์บนแผนที่'}>
+              <Fuel size={13} />
+              <span>ปั๊มน้ำมัน</span>
+              <em>{st.status === 'loading' ? 'กำลังโหลด…' : showSt ? 'เปิด' : 'ปิด'}</em>
+            </button>
+            {showSt && st.brands.map((b) => (
+              <button key={b.name} type="button" className={`sup${hiddenBrands.has(b.name) ? ' off' : ''}`}
+                aria-pressed={!hiddenBrands.has(b.name)} onClick={() => toggleBrand(b.name)} onDoubleClick={() => onlyBrand(b.name)}
+                title="คลิก = ซ่อน/แสดง · ดับเบิลคลิก = ดูแบรนด์นี้แบรนด์เดียว">
+                <i className="fuel-dot" style={{ background: b.color, color: fuelInk(b.color) }}>⛽</i>
+                <span>{b.name}</span>
+                <em>{nf.format(b.mapped)}</em>
+              </button>
+            ))}
+            {showSt && hiddenBrands.size > 0 && (
+              <button type="button" className="sup reset" onClick={() => setHiddenBrands(new Set())}>ทุกแบรนด์</button>
             )}
           </div>
 
@@ -365,13 +425,22 @@ export default function MapsPage() {
               {opened.has('google') && <GoogleMap active={engine === 'google'} {...mapProps} />}
 
               {me && nearest[0] && (
-                <button type="button" className={`near-bar${following ? ' following' : ''}`} onClick={() => goNearest(nearest[0].p)}
-                  title="ไปที่สถานีนี้">
-                  <span className="nb-dot" />
-                  <span className="nb-label">ใกล้สุด</span>
-                  <span className="nb-name">{nearest[0].p.name}</span>
-                  <span className="nb-dist">{formatDist(nearest[0].km)}</span>
-                </button>
+                <div className={`near-bar${following ? ' following' : ''}`}>
+                  <button type="button" className="nb-row" onClick={() => goNearest(nearest[0].p)} title="ไปที่จุดนี้">
+                    <span className="nb-dot" />
+                    <span className="nb-label">{nearest[0].p.kind === 'station' ? '⛽ ปั๊มใกล้สุด' : 'ใกล้สุด'}</span>
+                    <span className="nb-name">{nearest[0].p.kind === 'station' ? `${nearest[0].p.supplier} · ` : ''}{nearest[0].p.name}</span>
+                    <span className="nb-dist">{formatDist(nearest[0].km)}</span>
+                  </button>
+                  {nearestPump && (
+                    <button type="button" className="nb-row nb-pump" onClick={() => goNearest(nearestPump.p)} title="ไปที่ปั๊มนี้">
+                      <i className="fuel-dot" style={{ background: colorOf(nearestPump.p.supplier), color: fuelInk(colorOf(nearestPump.p.supplier)) }}>⛽</i>
+                      <span className="nb-label">ปั๊มใกล้สุด</span>
+                      <span className="nb-name">{nearestPump.p.supplier} · {nearestPump.p.name}</span>
+                      <span className="nb-dist">{formatDist(nearestPump.km)}</span>
+                    </button>
+                  )}
+                </div>
               )}
 
               <div className="map-tools">

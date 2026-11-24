@@ -3,7 +3,7 @@ import L from './leafletGlobal'
 import 'leaflet.markercluster'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
-import { popupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist } from './mapsData'
+import { pointPopupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist, stationSvg } from './mapsData'
 import { createGlide } from './myLocation'
 
 const TILES = {
@@ -20,6 +20,15 @@ const TILES = {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     opts: { maxZoom: 19, attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics' },
   },
+}
+
+// fuel station marker: brand-colored circle with a pump glyph (one icon per color)
+const stationIcons = new Map()
+const stationIcon = (color) => {
+  if (!stationIcons.has(color)) {
+    stationIcons.set(color, L.divIcon({ className: 'st-marker', html: stationSvg(color), iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -11] }))
+  }
+  return stationIcons.get(color)
 }
 
 const clusterIcon = (cluster) => {
@@ -136,9 +145,11 @@ export default function LeafletMap({
     const layers = points.map((p) => {
       let mk = markers.current.get(p)
       if (!mk) {
-        mk = L.circleMarker([p.lat, p.lng], {
-          radius: 6, weight: 1.5, color: '#fff', fillColor: colorOf(p.supplier), fillOpacity: 1,
-        })
+        mk = p.kind === 'station'
+          ? L.marker([p.lat, p.lng], { icon: stationIcon(colorOf(p.supplier)), title: p.name })
+          : L.circleMarker([p.lat, p.lng], {
+            radius: 6, weight: 1.5, color: '#fff', fillColor: colorOf(p.supplier), fillOpacity: 1,
+          })
         mk.on('click', () => cb.current.onSelect(p))
         markers.current.set(p, mk)
       }
@@ -183,7 +194,7 @@ export default function LeafletMap({
         html: `<span style="background:${colorOf(selected.supplier)}"></span>`,
       }),
     }).addTo(m)
-    highlight.current.bindPopup(popupHtml(selected, colorOf(selected.supplier)), { className: 'dark-popup', offset: [0, -10] })
+    highlight.current.bindPopup(pointPopupHtml(selected, colorOf(selected.supplier)), { className: 'dark-popup', offset: [0, -10], maxWidth: 300 })
     if (!cb.current.active) return
     m.flyTo(ll, Math.max(m.getZoom(), 16), { duration: 0.9 })
     const t = setTimeout(() => highlight.current?.openPopup(), 950)

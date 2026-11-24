@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Supercluster from 'supercluster'
-import { GOOGLE_MAPS_KEY, popupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist } from './mapsData'
+import { GOOGLE_MAPS_KEY, pointPopupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist, stationSvg } from './mapsData'
 import { GOOGLE_MAPS_DAILY_LIMIT, takeGoogleMapLoad, consumeGoogleMapLoad } from './mapsQuota'
 import { createGlide } from './myLocation'
 
@@ -145,9 +145,12 @@ export default function GoogleMap({
         })
       } else {
         const p = byId.current.get(c.id)
+        const color = live.current.colorOf(p.supplier)
         mk = new gm.Marker({
           position: { lat, lng }, map: m, title: p.name,
-          icon: { path: gm.SymbolPath.CIRCLE, scale: 6, fillColor: live.current.colorOf(p.supplier), fillOpacity: 1, strokeColor: '#fff', strokeWeight: 1.5 },
+          icon: p.kind === 'station'
+            ? { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(stationSvg(color)), scaledSize: new gm.Size(22, 22), anchor: new gm.Point(11, 11) }
+            : { path: gm.SymbolPath.CIRCLE, scale: 6, fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 1.5 },
         })
         mk.addListener('click', () => live.current.onSelect(p))
       }
@@ -264,7 +267,7 @@ export default function GoogleMap({
     if (!active) return
     map.current.panTo(pos)
     if (map.current.getZoom() < 16) map.current.setZoom(17)
-    info.current.setContent(popupHtml(selected, colorOf(selected.supplier)))
+    info.current.setContent(pointPopupHtml(selected, colorOf(selected.supplier)))
     info.current.open({ map: map.current, anchor: highlight.current, shouldFocus: false })
   }, [ready, selected, colorOf]) // eslint-disable-line react-hooks/exhaustive-deps
 

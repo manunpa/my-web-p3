@@ -432,7 +432,22 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .loc-btn.follow{background:#1a73e8;color:#fff;border-color:#1a73e8;box-shadow:0 0 0 4px #1a73e833,0 4px 14px rgba(0,0,0,.35)}
 .loc-btn.busy svg{animation:spin 1s linear infinite;color:var(--gold-text)}
 .loc-btn.recenter{color:#1a73e8}
-.near-bar{position:absolute;z-index:600;left:50%;top:12px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;max-width:calc(100% - 24px);padding:7px 12px;border-radius:12px;border:1px solid #e0526088;background:rgb(var(--surface-2) / .94);color:var(--text);font:inherit;font-size:12px;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+.near-bar{position:absolute;z-index:600;left:50%;top:12px;transform:translateX(-50%);display:flex;flex-direction:column;width:max-content;max-width:calc(100% - 24px);padding:3px;border-radius:12px;border:1px solid #e0526088;background:rgb(var(--surface-2) / .94);box-shadow:0 6px 20px rgba(0,0,0,.4)}
+.near-bar .nb-row{display:flex;align-items:center;gap:8px;min-width:0;padding:5px 9px;border:0;border-radius:9px;background:none;color:var(--text);font:inherit;font-size:12px;text-align:left;cursor:pointer}
+.near-bar .nb-row:hover{background:rgb(var(--glow) / .1)}
+.near-bar .nb-pump{border-top:1px solid var(--line);border-radius:0 0 9px 9px}
+.near-bar .nb-pump .nb-dist{background:var(--field);color:var(--text);border:1px solid var(--line)}
+.fuel-dot{display:inline-grid;place-items:center;flex:none;width:16px!important;height:16px!important;border-radius:50%;font-size:9px;font-style:normal;line-height:1}
+.st-list{margin-top:-4px}
+.sup.st-toggle{font-weight:600}
+.sup.st-toggle.on{border-color:#00a3e0;color:#00a3e0;background:#00a3e014}
+.sup.st-toggle em{font-weight:400}
+.st-marker{filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}
+.mpop-brand{padding:1px 7px;border-radius:6px;font-weight:700}
+.mpop-sec{margin-top:2px;font-size:11px;font-weight:600;color:var(--muted)}
+.mpop-chips{display:flex;flex-wrap:wrap;gap:3px;max-height:84px;overflow:auto}
+.mpop-chips i{font-style:normal;font-size:10.5px;padding:1px 6px;border-radius:6px;background:var(--field);border:1px solid var(--line)}
+.gm-style .mpop-chips i{background:#f4f4f5;border-color:#d4d4d8}
 .near-bar .nb-dot{flex:none;width:9px;height:9px;border-radius:50%;background:#e05260}
 .near-bar.following .nb-dot{animation:ping 1.6s cubic-bezier(0,0,.2,1) infinite}
 .near-bar .nb-label{flex:none;color:var(--muted)}
