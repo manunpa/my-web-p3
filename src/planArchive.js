@@ -28,3 +28,27 @@ export async function archivePlan(rows, files) {
   if (!json || json.status === 'error' || !json.ok) throw new Error((json && (json.message || json.error)) || 'บันทึกไม่สำเร็จ')
   return json
 }
+
+// A request cut off by the network ("Load failed" on iPhone Safari, "Failed to fetch" in Chrome),
+// e.g. when iOS shows the download sheet or the page goes to the background right after the
+// Excel download starts. Not an answer from the script.
+const isNetworkError = (e) => e instanceof TypeError || /load failed|failed to fetch|network/i.test(e?.message || '')
+const whenVisible = () => (document.visibilityState === 'visible' ? Promise.resolve() : new Promise((ok) => {
+  const on = () => { if (document.visibilityState === 'visible') { removeEventListener('visibilitychange', on); ok() } }
+  addEventListener('visibilitychange', on)
+}))
+const wait = (ms) => new Promise((ok) => setTimeout(ok, ms))
+
+// archivePlan, tried again after a network cut (up to 3 tries, once the page is visible again).
+// Safe to repeat: the script does not store a batch it already has.
+export async function archivePlanRetry(rows, files, tries = 3) {
+  for (let i = 1; ; i++) {
+    try {
+      return await archivePlan(rows, files)
+    } catch (e) {
+      if (i >= tries || !isNetworkError(e)) throw e
+      await whenVisible()
+      await wait(1500 * i)
+    }
+  }
+}

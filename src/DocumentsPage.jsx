@@ -4,7 +4,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { loadDistances, findMatch, findGeofence } from './distanceData'
-import { archivePlan, PLAN_ARCHIVE_URL } from './planArchive'
+import { archivePlanRetry, PLAN_ARCHIVE_URL } from './planArchive'
 import { calcTrip, fmtCell, SPEED } from './planTiming'
 import {
   OUT_HEAD, readBook, readSheet, pickSheet, sheetDate, guessDepot, convertSheet, toRows, numberRows,
@@ -201,8 +201,16 @@ export default function DocumentsPage() {
   const download = async () => {
     setSaving(true)
     setError(null)
+    let save = null
     try {
       const buf = await writeXlsx(rows)
+      // Start storing the plan before the download: on iPhone the download sheet can cut off a
+      // request started after it. A network cut is retried; the same plan is never stored twice.
+      if (PLAN_ARCHIVE_URL) {
+        setArchive({ status: 'saving' })
+        save = archivePlanRetry(rows, files.filter((f) => f.status === 'ready').map((f) => `${f.name} [${f.sheet}]`).join(', '))
+        save.catch(() => {}) // handled below; avoids an "unhandled" warning if the file step fails
+      }
       const first = files.find((f) => f.status === 'ready')
       const day = fromInputDate(first?.date) ?? today()
       const a = document.createElement('a')
@@ -212,15 +220,13 @@ export default function DocumentsPage() {
       setTimeout(() => URL.revokeObjectURL(a.href), 1000)
     } catch (e) {
       setError(`สร้างไฟล์ไม่ได้: ${e.message}`)
-      setSaving(false)
-      return
+      if (!save) { setSaving(false); return }
     }
-    // Same button also stores the same plan in the archive sheet. The file is already downloaded,
-    // so a failure here only shows a message (and the button can be pressed again).
-    if (PLAN_ARCHIVE_URL) {
-      setArchive({ status: 'saving' })
+    // Same button also stores the same plan in the archive sheet. A failure here only shows a
+    // message (and the button can be pressed again).
+    if (save) {
       try {
-        const res = await archivePlan(rows, files.filter((f) => f.status === 'ready').map((f) => `${f.name} [${f.sheet}]`).join(', '))
+        const res = await save
         setArchive({ status: 'done', saved: res.saved, duplicate: !!res.duplicate, sendNo: res.sendNo, at: new Date() })
       } catch (e) {
         setArchive({ status: 'error', error: e.message })
