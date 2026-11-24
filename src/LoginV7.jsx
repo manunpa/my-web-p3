@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Mail, Lock, Eye, EyeOff, User } from 'lucide-react'
 import {
   signInWithEmailAndPassword,
@@ -15,6 +15,8 @@ import {
 import { auth } from './firebase'
 import { useTilt, ripple } from './useTilt'
 import { verifyLinkSettings } from './VerifyEmail'
+
+const LoginGlow = lazy(() => import('./LoginGlow'))
 
 const explain = (code) => {
   switch (code) {
@@ -139,6 +141,7 @@ export default function LoginV7({ notice, onProfileUpdated }) {
 
   return (
     <div className="stage" ref={stage}>
+      <Suspense fallback={null}><LoginGlow /></Suspense>
       <form className="card in" ref={card} onSubmit={submit} noValidate>
         {signingUp ? (
           <>

@@ -11,6 +11,7 @@ radial-gradient(60% 40% at 15% 20%,rgb(var(--glow2) / .55),transparent 70%),
 radial-gradient(50% 35% at 90% 75%,rgb(var(--glow) / .35),transparent 70%),
 conic-gradient(from 210deg at 70% 30%,var(--bg-a),var(--bg-b) 20%,var(--bg-a) 40%,var(--bg-c) 60%,var(--bg-a) 80%)}
 .stage::before{content:"";position:absolute;width:560px;height:560px;border-radius:50%;left:calc(var(--mx,50%) - 280px);top:calc(var(--my,50%) - 280px);background:radial-gradient(circle,rgb(var(--glow) / .26),transparent 65%);transition:left .7s ease-out,top .7s ease-out;pointer-events:none}
+.stage:has(>.login-glow)::before{display:none}
 .stage::after{content:"";position:absolute;inset:-50%;background:conic-gradient(from 0deg,transparent,rgb(var(--glow) / .10),transparent 30%,rgb(var(--glow2) / .12),transparent 60%);animation:spin 28s linear infinite;pointer-events:none}
 .card{position:relative;z-index:1;width:100%;max-width:440px;padding:32px;border-radius:24px;background:var(--card);border:1px solid var(--line);
 backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 30px 80px rgba(0,0,0,.55);transition:transform .18s ease-out}
