@@ -269,6 +269,7 @@ export default function GoogleMap({
 
   // rain radar: a custom tile layer, replaced for each frame
   const rainUrl = rain?.template ?? null
+  const rainMax = rain?.maxZoom ?? 7
   useEffect(() => {
     if (!ready) return
     const gm = window.google.maps
@@ -277,10 +278,10 @@ export default function GoogleMap({
     if (!rainUrl) return
     layers.push({
       tileSize: new gm.Size(256, 256), minZoom: 0, maxZoom: 19, name: 'rain',
-      getTile: (coord, zoom, doc) => radarTileElement(doc, rainUrl, coord, zoom),
+      getTile: (coord, zoom, doc) => radarTileElement(doc, rainUrl, coord, zoom, rainMax),
       releaseTile: () => {},
     })
-  }, [ready, rainUrl])
+  }, [ready, rainUrl, rainMax])
 
   // concession areas (offshore layer): a Data layer with outlines and a light fill, click for details
   const areaData = useRef(null)

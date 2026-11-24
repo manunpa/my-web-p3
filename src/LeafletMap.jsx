@@ -8,7 +8,7 @@ import {
 } from './mapsData'
 import { areaColor } from './offshoreData'
 import { createGlide, ACC_CIRCLE_MAX_M } from './myLocation'
-import { RAIN_MAX_ZOOM, RAIN_SHOW_MAX_ZOOM, RAIN_OPACITY } from './rainRadar'
+import { RAIN_SHOW_MAX_ZOOM, RAIN_OPACITY } from './rainRadar'
 
 const TILES = {
   road: {
@@ -169,17 +169,24 @@ export default function LeafletMap({
     tiles.current.bringToBack()
   }, [type])
 
-  // rain radar: one tile layer, its URL is swapped for each frame
+  // rain layer: one tile layer, its URL is swapped for each frame (and when the source changes)
   const rainLayer = useRef(null)
   const rainUrl = rain?.template ?? null
+  const rainMax = rain?.maxZoom ?? 7
+  const rainCredit = rain?.credit ?? null
   useEffect(() => {
     if (!rainUrl) { rainLayer.current?.remove(); rainLayer.current = null; return }
+    const attribution = rainCredit ? `Rain &copy; <a href="${rainCredit.url}">${rainCredit.name}</a>` : ''
+    // a new source gets a new layer (the credit shown in the corner of the map is fixed when it is added)
+    if (rainLayer.current && rainLayer.current.options.attribution !== attribution) {
+      rainLayer.current.remove()
+      rainLayer.current = null
+    }
     if (rainLayer.current) { rainLayer.current.setUrl(rainUrl); return }
     rainLayer.current = L.tileLayer(rainUrl, {
-      opacity: RAIN_OPACITY, maxNativeZoom: RAIN_MAX_ZOOM, maxZoom: RAIN_SHOW_MAX_ZOOM, zIndex: 10,
-      attribution: 'Radar &copy; <a href="https://www.rainviewer.com/">RainViewer</a>',
+      opacity: RAIN_OPACITY, maxNativeZoom: rainMax, maxZoom: RAIN_SHOW_MAX_ZOOM, zIndex: 10, attribution,
     }).addTo(map.current)
-  }, [rainUrl])
+  }, [rainUrl, rainMax, rainCredit])
 
   // concession areas (offshore layer): outlines with a light fill, click for details
   const areaLayer = useRef(null)

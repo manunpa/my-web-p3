@@ -4,7 +4,7 @@ import {
   LocateFixed, Navigation, Fuel, Car, Bus, Bike, Eye, CloudRain, Play, Pause, Anchor,
 } from 'lucide-react'
 import { loadOffshore, cachedOffshore, DMF_CREDIT, PLATFORM_GROUP, PLATFORM_COLOR } from './offshoreData'
-import { loadRainFrames, rainTimeLabel } from './rainRadar'
+import { loadRainFrames, rainTimeLabel, lagLabel } from './rainRadar'
 import StreetViewPanel from './StreetViewPanel'
 import {
   loadGeofences, cachedGeofences, googleMapsLink, navLink, parseCoords, OTHER_SUPPLIER_COLOR,
@@ -137,33 +137,52 @@ export default function MapsPage() {
   const [rainData, setRainData] = useState(null)
   const [rainIdx, setRainIdx] = useState(0)
   const [rainPlaying, setRainPlaying] = useState(false)
+  // Two sources: 'radar' (RainViewer, detailed, 2 hours) and 'nasa' (NASA satellite, coarse, 6 hours,
+  // several hours behind). If the radar cannot be loaded the page switches to NASA by itself.
+  const [rainSrc, setRainSrc] = useState(() => (store.get('maps.rainSrc', 'radar') === 'nasa' ? 'nasa' : 'radar'))
   useEffect(() => { store.set('maps.rain', rainOn ? '1' : '0') }, [rainOn])
+  useEffect(() => { store.set('maps.rainSrc', rainSrc) }, [rainSrc])
   useEffect(() => {
     if (!rainOn) { setRainPlaying(false); return undefined }
     let alive = true
     const pull = async (first) => {
       try {
-        const d = await loadRainFrames()
+        const d = await loadRainFrames(rainSrc)
         if (!alive) return
         setRainData(d)
         setRainIdx((i) => (first || i >= d.frames.length ? d.frames.length - 1 : i))
       } catch (e) {
         if (!alive) return
+        if (rainSrc === 'radar') {
+          try { // RainViewer is down or refuses us: NASA is the second choice
+            await loadRainFrames('nasa')
+            if (!alive) return
+            setRainSrc('nasa') // the effect runs again and loads it
+            say(`เรดาร์ RainViewer ใช้ไม่ได้ (${e.message}) — สลับไปใช้ข้อมูลดาวเทียม NASA แทน`, 7000)
+            return
+          } catch { /* both failed */ }
+        }
+        if (!alive) return
         setRainOn(false)
-        say(`โหลดเรดาร์ฝนไม่สำเร็จ (${e.message})`, 6000)
+        say(`โหลดข้อมูลฝนไม่สำเร็จ (${e.message})`, 6000)
       }
     }
     pull(true)
     const t = setInterval(() => pull(false), 5 * 60 * 1000)
     return () => { alive = false; clearInterval(t) }
-  }, [rainOn, say])
+  }, [rainOn, rainSrc, say])
   useEffect(() => {
     if (!rainPlaying || !rainData) return undefined
     const t = setInterval(() => setRainIdx((i) => (i + 1) % rainData.frames.length), 700)
     return () => clearInterval(t)
   }, [rainPlaying, rainData])
-  const rainFrame = rainOn && rainData ? rainData.frames[Math.min(rainIdx, rainData.frames.length - 1)] : null
-  const rain = useMemo(() => (rainFrame ? { template: rainFrame.template } : null), [rainFrame])
+  const rainReady = rainOn && rainData?.source === rainSrc // false for a moment after the source was switched
+  const rainFrame = rainReady ? rainData.frames[Math.min(rainIdx, rainData.frames.length - 1)] : null
+  const rain = useMemo(
+    () => (rainFrame ? { template: rainFrame.template, maxZoom: rainData.maxZoom, credit: rainData.credit } : null),
+    [rainFrame, rainData],
+  )
+  const pickRainSrc = (s) => { setRainPlaying(false); setRainSrc(s) }
 
   // Street View panel (opens over the map; each opening is counted by streetViewQuota.js)
   const [sv, setSv] = useState(null)
@@ -628,18 +647,33 @@ export default function MapsPage() {
           {/* Bottom-center items stack on their own, so they never sit on top of each other. */}
           <div className="map-stack">
             {note && <div className="map-note" role="status">{note.text}</div>}
-            {rainOn && rainData && rainFrame && (
-              <div className="rain-bar" role="group" aria-label="เรดาร์ฝน">
-                <button type="button" className="rain-play" onClick={() => setRainPlaying((p) => !p)}
-                  aria-label={rainPlaying ? 'หยุดเล่น' : 'เล่นย้อนหลัง 2 ชั่วโมง'} title={rainPlaying ? 'หยุดเล่น' : 'เล่นย้อนหลัง 2 ชั่วโมง'}>
-                  {rainPlaying ? <Pause size={15} /> : <Play size={15} />}
-                </button>
-                <input type="range" min={0} max={rainData.frames.length - 1} value={Math.min(rainIdx, rainData.frames.length - 1)}
-                  onChange={(e) => { setRainPlaying(false); setRainIdx(Number(e.target.value)) }} aria-label="เวลาของเรดาร์ฝน" />
-                <span className="rain-time">
-                  {rainTimeLabel(rainFrame.time)} น.{rainIdx >= rainData.frames.length - 1 ? ' · ล่าสุด' : ''}
-                </span>
-                <a className="rain-credit" href={rainData.credit.url} target="_blank" rel="noopener noreferrer">{rainData.credit.name}</a>
+            {rainOn && rainData && (
+              <div className="rain-bar" role="group" aria-label="ชั้นฝน">
+                <div className="rain-row">
+                  <div className="rain-src" role="radiogroup" aria-label="แหล่งข้อมูลฝน">
+                    <button type="button" role="radio" aria-checked={rainSrc === 'radar'} className={rainSrc === 'radar' ? 'on' : ''}
+                      onClick={() => pickRainSrc('radar')} title="เรดาร์ฝน (RainViewer): ละเอียด เกือบเรียลไทม์ ย้อนหลัง 2 ชั่วโมง">เรดาร์</button>
+                    <button type="button" role="radio" aria-checked={rainSrc === 'nasa'} className={rainSrc === 'nasa' ? 'on' : ''}
+                      onClick={() => pickRainSrc('nasa')} title="ดาวเทียม NASA: หยาบ (ราว 10 กม.) ช้ากว่าปัจจุบันหลายชั่วโมง ย้อนหลัง 6 ชั่วโมง">ดาวเทียม</button>
+                  </div>
+                  <a className="rain-credit" href={rainData.credit.url} target="_blank" rel="noopener noreferrer">{rainData.credit.name}</a>
+                </div>
+                <div className="rain-row">
+                  <button type="button" className="rain-play" disabled={!rainFrame} onClick={() => setRainPlaying((p) => !p)}
+                    aria-label={rainPlaying ? 'หยุดเล่น' : 'เล่นย้อนหลัง'} title={rainPlaying ? 'หยุดเล่น' : 'เล่นย้อนหลัง'}>
+                    {rainPlaying ? <Pause size={15} /> : <Play size={15} />}
+                  </button>
+                  <input type="range" min={0} max={rainData.frames.length - 1} value={Math.min(rainIdx, rainData.frames.length - 1)}
+                    disabled={!rainFrame} onChange={(e) => { setRainPlaying(false); setRainIdx(Number(e.target.value)) }} aria-label="เวลาของข้อมูลฝน" />
+                  <span className="rain-time">
+                    {rainFrame ? (
+                      <>
+                        {rainTimeLabel(rainFrame.time)} น.
+                        {rainIdx >= rainData.frames.length - 1 ? ` · ล่าสุด${lagLabel(rainData.lagMs) ? ` (${lagLabel(rainData.lagMs)})` : ''}` : ''}
+                      </>
+                    ) : 'กำลังโหลด…'}
+                  </span>
+                </div>
               </div>
             )}
           </div>
