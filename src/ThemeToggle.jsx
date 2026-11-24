@@ -1,31 +1,18 @@
-import { useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
+import { useTheme, setPrefs, modeOf } from './themePrefs'
 
-// Light (default) or dark gold. Only an explicit choice is saved; with none saved the page is light.
-// index.html applies the same rule before the page paints.
-const KEY = 'theme'
-
-export function applyTheme(theme) {
-  if (theme === 'light') document.documentElement.dataset.theme = 'light'
-  else delete document.documentElement.dataset.theme
-}
-
-const saved = () => {
-  try { return localStorage.getItem(KEY) === 'dark' ? 'dark' : 'light' } catch { return 'light' }
-}
-
+// Quick light / dark switch in the corner of every page. The full choice (themes, custom colors)
+// is on the Settings page (#/settings). Custom colors set light or dark from their own background,
+// so the switch is hidden while they are in use.
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState(saved)
-  const next = theme === 'light' ? 'dark' : 'light'
-  const toggle = () => {
-    applyTheme(next)
-    setTheme(next)
-    try { localStorage.setItem(KEY, next) } catch { /* private mode: still switches for this visit */ }
-  }
+  const { prefs } = useTheme()
+  if (prefs.preset === 'custom') return null
+  const now = modeOf(prefs)
+  const next = now === 'light' ? 'dark' : 'light'
   return (
-    <button type="button" className="theme-btn" onClick={toggle}
-      aria-label={next === 'light' ? 'เปลี่ยนเป็นโทนสว่าง' : 'เปลี่ยนเป็นโทนมืด'} title={next === 'light' ? 'โทนสว่าง' : 'โทนมืดทอง'}>
-      {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+    <button type="button" className="theme-btn" onClick={() => setPrefs((p) => ({ ...p, mode: next }))}
+      aria-label={next === 'light' ? 'เปลี่ยนเป็นโทนสว่าง' : 'เปลี่ยนเป็นโทนมืด'} title={next === 'light' ? 'โทนสว่าง' : 'โทนมืด'}>
+      {now === 'light' ? <Moon size={15} /> : <Sun size={15} />}
     </button>
   )
 }

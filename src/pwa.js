@@ -30,13 +30,15 @@ if (isApp) {
 }
 
 // ---- theme-color ตามธีม ----
+// สีพื้นหลังจริงของธีมที่เลือก (--bg) รวมธีมสำเร็จรูปและสีกำหนดเองจาก src/themePrefs.js
 const THEME = { dark: '#07070a', light: '#f7f4ec' }
 function syncThemeColor() {
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute('content', document.documentElement.dataset.theme === 'light' ? THEME.light : THEME.dark)
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
+  if (meta) meta.setAttribute('content', bg || (document.documentElement.dataset.theme === 'light' ? THEME.light : THEME.dark))
 }
 syncThemeColor()
-try { new MutationObserver(syncThemeColor).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] }) } catch (_) { /* เบราว์เซอร์เก่า */ }
+try { new MutationObserver(syncThemeColor).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] }) } catch (_) { /* เบราว์เซอร์เก่า */ }
 
 // ---- ปุ่ม "ติดตั้งเป็นแอป" (Android: Chrome / Samsung Internet) ----
 // แสดงเมื่อเบราว์เซอร์ยืนยันว่าติดตั้งได้ · เฉพาะหน้าแรก (เข้าสู่ระบบ/หน้าหลัก) · ติดตั้งแล้ว/เปิดเป็นแอป = ไม่แสดง · × ซ่อน 7 วัน

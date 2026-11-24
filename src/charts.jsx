@@ -215,8 +215,8 @@ export function LineChart({ data, animKey, format, tickFormat = (v) => compact.f
           onPointerMove={move} onPointerLeave={() => setHover(null)}>
           <defs>
             <linearGradient id="line-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#facc15" stopOpacity=".35" />
-              <stop offset="100%" stopColor="#facc15" stopOpacity="0" />
+              <stop offset="0%" style={{ stopColor: 'rgb(var(--glow))' }} stopOpacity=".35" />
+              <stop offset="100%" style={{ stopColor: 'rgb(var(--glow))' }} stopOpacity="0" />
             </linearGradient>
           </defs>
           {ticks.map((t) => (

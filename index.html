@@ -27,8 +27,9 @@
 <link rel="apple-touch-icon" sizes="152x152" href="./icons/apple-touch-icon-152.png">
 <link rel="apple-touch-icon" sizes="167x167" href="./icons/apple-touch-icon-167.png">
 <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
-<!-- Theme (ThemeToggle.jsx): light unless dark was chosen; set before first paint so it does not flash -->
-<script>try{if(localStorage.getItem('theme')!=='dark')document.documentElement.dataset.theme='light'}catch(e){document.documentElement.dataset.theme='light'}</script>
+<!-- Theme (src/themePrefs.js): the colors last used on this device, set before first paint so it does not flash.
+     No saved look -> light gold (the team default), or dark if the old toggle chose dark. -->
+<script>try{var r=document.documentElement,t=JSON.parse(localStorage.getItem('themePaint')||'null');if(t){if(t.mode==='light')r.dataset.theme='light';if(t.vars)for(var k in t.vars)r.style.setProperty(k,t.vars[k])}else if(localStorage.getItem('theme')!=='dark')r.dataset.theme='light'}catch(e){document.documentElement.dataset.theme='light'}</script>
 </head>
 <body>
 <div id="root"></div>

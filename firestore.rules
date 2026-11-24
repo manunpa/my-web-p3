@@ -16,6 +16,28 @@ service cloud.firestore {
         && request.time < timestamp.value(request.auth.token.auth_time * 1000) + duration.value(120, 'm');
     }
 
+    // The look a user picked on the Settings page (src/themePrefs.js): light/dark mode, a theme, custom colors.
+    // Only the expected keys and shapes are accepted (colors as #rrggbb), so nothing else can be stored here.
+    function validCustom(c) {
+      return c is map
+        && c.keys().hasOnly(['accent', 'bg', 'text', 'card', 'glass'])
+        && c.get('accent', '').matches('^#[0-9a-f]{6}$')
+        && c.get('bg', '').matches('^#[0-9a-f]{6}$')
+        && c.get('text', '').matches('^(#[0-9a-f]{6})?$')
+        && c.get('card', '').matches('^(#[0-9a-f]{6})?$')
+        && c.get('glass', 0) is number
+        && c.get('glass', 0) >= 0 && c.get('glass', 0) <= 100;
+    }
+    function validPrefs(p) {
+      return p is map
+        && p.keys().hasOnly(['v', 'mode', 'preset', 'custom'])
+        && p.get('v', 1) == 1
+        && p.get('mode', 'light') in ['light', 'dark', 'system']
+        && p.get('preset', 'team') is string
+        && p.get('preset', 'team').matches('^[a-z]{1,20}$')
+        && (p.get('custom', null) == null || validCustom(p.custom));
+    }
+
     match /users/{uid} {
       allow read: if activeSession() && request.auth.uid == uid;
 
@@ -23,7 +45,8 @@ service cloud.firestore {
         && request.auth.uid == uid
         && request.resource.data.uid == uid
         && request.resource.data.keys().hasOnly(
-             ['uid', 'email', 'name', 'photoURL', 'provider', 'createdAt', 'lastSeenAt']);
+             ['uid', 'email', 'name', 'photoURL', 'provider', 'createdAt', 'lastSeenAt', 'prefs'])
+        && (!('prefs' in request.resource.data) || validPrefs(request.resource.data.prefs));
 
       allow delete: if false;
     }

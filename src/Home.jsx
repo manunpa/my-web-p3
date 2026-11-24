@@ -14,7 +14,7 @@ const LINKS = [
   { label: 'Documents', hint: 'Plan file converter', icon: FileText, href: '#/documents' },
   { label: 'Reports', hint: 'Report tables & export', icon: BarChart3, href: '#/reports' },
   { label: 'Notifications', hint: 'Latest updates', icon: Bell, href: '#/notifications' },
-  { label: 'Settings', hint: 'Preferences', icon: Settings, href: '#' },
+  { label: 'Settings', hint: 'Theme & colors', icon: Settings, href: '#/settings' },
 ]
 
 export default function Home({ user }) {

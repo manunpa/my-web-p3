@@ -13,11 +13,13 @@ import SessionTimer from './SessionTimer'
 import ThemeToggle from './ThemeToggle'
 import PageErrorBoundary from './PageErrorBoundary'
 import { saveUser } from './saveUser'
+import { loadForUser, signedOut } from './themePrefs'
 
 // The map page pulls in the map libraries, so it is only downloaded when opened.
 const MapsPage = lazy(() => import('./MapsPage'))
 const DocumentsPage = lazy(() => import('./DocumentsPage'))
 const ReportsPage = lazy(() => import('./ReportsPage'))
+const SettingsPage = lazy(() => import('./SettingsPage'))
 
 // How long a sign-in lasts before the user is signed out automatically.
 // Keep in sync with duration.value(120, 'm') in firestore.rules.
@@ -34,6 +36,7 @@ const ROUTES = {
   '/maps': MapsPage,
   '/documents': DocumentsPage,
   '/reports': ReportsPage,
+  '/settings': SettingsPage,
   '/notifications': NotificationsPage, // opens PMS Desk
   '/notifications/pms': (props) => <NotificationsPage {...props} source="pms" />,
   '/notifications/pms2': (props) => <NotificationsPage {...props} source="pms2" />,
@@ -77,8 +80,13 @@ function Screen() {
     setUser(u)
     if (u) {
       setNotice(null)
-      if (u.emailVerified) saveUser(u) // unverified accounts are saved by VerifyEmail once confirmed
+      if (u.emailVerified) {
+        // Unverified accounts are saved by VerifyEmail once confirmed. Then this user's own theme
+        // (src/themePrefs.js); saveUser never throws, so the theme always loads.
+        saveUser(u).then(() => loadForUser(u.uid))
+      }
     } else {
+      signedOut()
       setVerified(null)
       setDeadline(null)
     }
