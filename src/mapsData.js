@@ -317,13 +317,17 @@ export const streetViewLink = (p) => `https://www.google.com/maps/@?api=1&map_ac
 export const navLink = (p) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`
 
 // Copy / navigate buttons for popups. MapsPage handles clicks on [data-copy].
+// Opens Windy (wind, waves, rain forecast) at a point: free, just a link.
+export const windyLink = (p, zoom = 9) => `https://www.windy.com/${p.lat.toFixed(3)}/${p.lng.toFixed(3)}?${p.lat.toFixed(3)},${p.lng.toFixed(3)},${zoom}`
+
 function popupActions(p, { onRoad = true } = {}) {
   const c = `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`
-  // Street View and driving directions make no sense for a platform out at sea.
+  // Street View and driving directions make no sense for a platform out at sea; wind and waves do.
   return `<div class="mpop-actions">
     ${onRoad ? `<button type="button" class="mpop-btn" data-sv="${p.lat},${p.lng}">👁 Street View</button>` : ''}
     <button type="button" class="mpop-btn" data-copy="${c}">⧉ คัดลอกพิกัด</button>
-    ${onRoad ? `<a class="mpop-btn primary" href="${navLink(p)}" target="_blank" rel="noopener">➤ นำทาง</a>` : ''}
+    ${onRoad ? `<a class="mpop-btn primary" href="${navLink(p)}" target="_blank" rel="noopener">➤ นำทาง</a>`
+    : `<a class="mpop-btn primary" href="${windyLink(p)}" target="_blank" rel="noopener">🌬 ลม/คลื่น (Windy)</a>`}
   </div>`
 }
 

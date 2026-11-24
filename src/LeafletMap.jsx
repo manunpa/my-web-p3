@@ -72,7 +72,7 @@ const platClusterIcon = makeClusterIcon('gcluster gcluster-plat')
 // focus: { key, pts } -> zoom to show all pts.
 export default function LeafletMap({
   points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
-  me, nearest, following, locked, onUnlock, focus, rain, areas,
+  me, nearest, following, locked, onUnlock, focus, rain, areas, route,
 }) {
   const box = useRef(null)
   const map = useRef(null)
@@ -187,6 +187,19 @@ export default function LeafletMap({
       opacity: RAIN_OPACITY, maxNativeZoom: rainMax, maxZoom: RAIN_SHOW_MAX_ZOOM, zIndex: 10, attribution,
     }).addTo(map.current)
   }, [rainUrl, rainMax, rainCredit])
+
+  // driving route: a blue line with a white edge, zoomed to fit
+  const routeLayer = useRef(null)
+  useEffect(() => {
+    routeLayer.current?.remove()
+    routeLayer.current = null
+    if (!route?.coords?.length) return
+    routeLayer.current = L.layerGroup([
+      L.polyline(route.coords, { color: '#fff', weight: 9, opacity: 0.85, lineCap: 'round', lineJoin: 'round', interactive: false }),
+      L.polyline(route.coords, { color: '#1a73e8', weight: 5, opacity: 0.95, lineCap: 'round', lineJoin: 'round', interactive: false }),
+    ]).addTo(map.current)
+    if (cb.current.active) map.current.fitBounds(L.latLngBounds(route.coords), { padding: [60, 60], maxZoom: 16 })
+  }, [route])
 
   // concession areas (offshore layer): outlines with a light fill, click for details
   const areaLayer = useRef(null)

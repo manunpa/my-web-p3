@@ -96,7 +96,7 @@ const clusterSize = (n) => (n < 10 ? 34 : n < 100 ? 40 : n < 1000 ? 48 : 56)
  */
 export default function GoogleMap({
   points, colorOf, selected, onSelect, type, view, onView, fitKey, active, pin,
-  me, nearest, following, locked, onUnlock, focus, overlays, onFail, rain, areas,
+  me, nearest, following, locked, onUnlock, focus, overlays, onFail, rain, areas, route,
 }) {
   const box = useRef(null)
   const map = useRef(null)
@@ -282,6 +282,26 @@ export default function GoogleMap({
       releaseTile: () => {},
     })
   }, [ready, rainUrl, rainMax])
+
+  // driving route: a blue line with a white edge, zoomed to fit
+  const routeLines = useRef([])
+  useEffect(() => {
+    if (!ready) return
+    const gm = window.google.maps
+    routeLines.current.forEach((l) => l.setMap(null))
+    routeLines.current = []
+    if (!route?.coords?.length) return
+    const path = route.coords.map(([lat, lng]) => ({ lat, lng }))
+    const line = (color, weight, z) => new gm.Polyline({
+      map: map.current, path, clickable: false, strokeColor: color, strokeWeight: weight, strokeOpacity: 0.95, zIndex: z,
+    })
+    routeLines.current = [line('#ffffff', 9, 60), line('#1a73e8', 5, 61)]
+    if (live.current.active) {
+      const b = new gm.LatLngBounds()
+      path.forEach((p) => b.extend(p))
+      map.current.fitBounds(b, 60)
+    }
+  }, [ready, route])
 
   // concession areas (offshore layer): a Data layer with outlines and a light fill, click for details
   const areaData = useRef(null)

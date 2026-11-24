@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Search, RefreshCw, MapPin, Layers, Crosshair, X, Copy, Check, ExternalLink, AlertTriangle,
-  LocateFixed, Navigation, Fuel, Car, Bus, Bike, Eye, CloudRain, Play, Pause, Anchor,
+  LocateFixed, Navigation, Fuel, Car, Bus, Bike, Eye, CloudRain, Play, Pause, Anchor, Wind,
 } from 'lucide-react'
 import { loadOffshore, cachedOffshore, DMF_CREDIT, PLATFORM_GROUP, PLATFORM_COLOR } from './offshoreData'
 import { loadRainFrames, rainTimeLabel, lagLabel } from './rainRadar'
+import { driveTable, driveRoute, formatMin, OSRM_CREDIT } from './routing'
 import StreetViewPanel from './StreetViewPanel'
 import {
-  loadGeofences, cachedGeofences, googleMapsLink, navLink, parseCoords, OTHER_SUPPLIER_COLOR,
+  loadGeofences, cachedGeofences, googleMapsLink, navLink, windyLink, parseCoords, OTHER_SUPPLIER_COLOR,
   distanceKm, nearestTo, formatDist, loadStations, cachedStations, fuelInk,
 } from './mapsData'
 import { useMyLocation, ACC_CIRCLE_MAX_M } from './myLocation'
@@ -373,9 +374,64 @@ export default function MapsPage() {
   // tap the "nearest" bar: show that station (while following, stop pulling the map back to me)
   const goNearest = (p) => { setLocked(false); setSelected(p) }
 
+  // Real driving distance / time (OSRM, only when asked). drive = { from, items: { id: { km, min } }, route: { id, name, km, min, coords } | null }
+  // It is dropped when my position or the searched coordinate moves more than 300 m, because it no longer fits.
+  const [drive, setDrive] = useState(null)
+  const [driveBusy, setDriveBusy] = useState(false)
+  useEffect(() => {
+    setDrive((d) => (d && lineFrom && distKm(d.from, lineFrom) <= 0.3 ? d : null))
+  }, [lineFrom?.lat, lineFrom?.lng]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Drive time / distance to the 5 nearest (one call), then the route to the quickest one (a second call).
+  const driveNearest = async () => {
+    const from = lineFrom
+    const targets = nearest.filter((n) => n.p.kind !== 'platform')
+    if (!from || !targets.length || driveBusy) return
+    setDriveBusy(true)
+    try {
+      const res = await driveTable(from, targets.map((n) => n.p))
+      const items = {}
+      let best = null
+      targets.forEach((n, i) => {
+        if (!res[i]) return
+        items[n.p.id] = res[i]
+        if (!best || res[i].min < best.r.min) best = { p: n.p, r: res[i] }
+      })
+      if (!best) { say('ไม่พบเส้นทางถนนไปยังจุดใกล้เคียง', 5000); setDrive({ from: { ...from }, items, route: null }); return }
+      const rt = await driveRoute(from, best.p)
+      setDrive({ from: { ...from }, items, route: { id: best.p.id, name: best.p.name, ...rt } })
+      if (best.p.id !== targets[0].p.id) {
+        say(`ใกล้สุดเมื่อขับจริงคือ ${best.p.name} (${formatMin(best.r.min)}) ไม่ใช่จุดที่ใกล้สุดแบบเส้นตรง`, 8000)
+      }
+    } catch (e) {
+      say(`คำนวณเส้นทางขับไม่สำเร็จ: ${e.message} (ยังแสดงระยะเส้นตรงตามเดิม)`, 7000)
+    } finally {
+      setDriveBusy(false)
+    }
+  }
+
+  // Route to one chosen point (the selected station).
+  const driveTo = async (p) => {
+    const from = lineFrom
+    if (!from || driveBusy) return
+    setDriveBusy(true)
+    try {
+      const rt = await driveRoute(from, p)
+      setDrive((d) => ({
+        from: { ...from }, items: { ...(d && distKm(d.from, from) <= 0.3 ? d.items : {}), [p.id]: { km: rt.km, min: rt.min } },
+        route: { id: p.id, name: p.name, ...rt },
+      }))
+    } catch (e) {
+      say(`คำนวณเส้นทางขับไม่สำเร็จ: ${e.message}`, 7000)
+    } finally {
+      setDriveBusy(false)
+    }
+  }
+
   const mapProps = {
     points: shown, colorOf, selected, onSelect: setSelected, type, view: view.current, onView, fitKey, pin,
     me, nearest, following, locked: following && locked, onUnlock: () => setLocked(false), focus, rain, areas,
+    route: drive?.route ?? null,
   }
 
   return (
@@ -516,6 +572,12 @@ export default function MapsPage() {
                 <button type="button" className="more" onClick={() => copy(pin)}>
                   {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'คัดลอกแล้ว' : 'คัดลอกพิกัด'}
                 </button>
+                {nearest.some((n) => n.p.kind !== 'platform') && (
+                  <button type="button" className="more" disabled={driveBusy} onClick={driveNearest}
+                    title="คำนวณระยะและเวลาขับจริงไป 5 จุดที่ใกล้ที่สุด (ประมาณการสำหรับรถยนต์)">
+                    <Car size={14} /> {driveBusy ? 'กำลังคำนวณ…' : 'ขับจริงไป 5 จุดใกล้สุด'}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -535,8 +597,19 @@ export default function MapsPage() {
                 <a className="more" href={googleMapsLink(selected)} target="_blank" rel="noopener noreferrer">
                   <ExternalLink size={14} /> Google Maps
                 </a>
+                {selected.kind === 'platform' && (
+                  <a className="more" href={windyLink(selected)} target="_blank" rel="noopener noreferrer">
+                    <Wind size={14} /> ลม/คลื่น (Windy)
+                  </a>
+                )}
                 {selected.kind !== 'platform' && ( // no roads or street imagery out at sea
                   <>
+                    {lineFrom && (
+                      <button type="button" className="more" disabled={driveBusy} onClick={() => driveTo(selected)}
+                        title="เส้นทางขับจากตำแหน่งของฉัน/พิกัดที่ค้นหา มาที่จุดนี้ (ประมาณการสำหรับรถยนต์)">
+                        <Car size={14} /> {driveBusy ? 'กำลังคำนวณ…' : 'เส้นทางขับ'}
+                      </button>
+                    )}
                     <a className="more" href={navLink(selected)} target="_blank" rel="noopener noreferrer">
                       <Navigation size={14} /> นำทาง
                     </a>
@@ -564,6 +637,7 @@ export default function MapsPage() {
                   <span className="pmeta">
                     {p.supplier} · {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
                     {origin && <> · {distKm(origin, p).toFixed(1)} กม.</>}
+                    {drive?.items[p.id] && <b className="pdrive"> · ขับ {formatMin(drive.items[p.id].min)} ({drive.items[p.id].km.toFixed(1)} กม.)</b>}
                   </span>
                 </button>
               </li>
@@ -610,6 +684,9 @@ export default function MapsPage() {
                     <span className="nb-label">{nearest[0].p.kind === 'station' ? '⛽ ปั๊มใกล้สุด' : nearest[0].p.kind === 'platform' ? 'แท่นใกล้สุด' : 'ใกล้สุด'}</span>
                     <span className="nb-name">{nearest[0].p.kind === 'station' ? `${nearest[0].p.supplier} · ` : ''}{nearest[0].p.name}</span>
                     <span className="nb-dist">{formatDist(nearest[0].km)}</span>
+                    {drive?.items[nearest[0].p.id] && (
+                      <span className="nb-drive-info">ขับ {formatMin(drive.items[nearest[0].p.id].min)}</span>
+                    )}
                   </button>
                   {nearestPump && (
                     <button type="button" className="nb-row nb-pump" onClick={() => goNearest(nearestPump.p)} title="ไปที่ปั๊มนี้">
@@ -617,6 +694,13 @@ export default function MapsPage() {
                       <span className="nb-label">ปั๊มใกล้สุด</span>
                       <span className="nb-name">{nearestPump.p.supplier} · {nearestPump.p.name}</span>
                       <span className="nb-dist">{formatDist(nearestPump.km)}</span>
+                    </button>
+                  )}
+                  {nearest.some((n) => n.p.kind !== 'platform') && (
+                    <button type="button" className="nb-row nb-pump nb-drive-btn" disabled={driveBusy} onClick={driveNearest}
+                      title="คำนวณระยะและเวลาขับจริงไป 5 จุดที่ใกล้ที่สุด (ประมาณการสำหรับรถยนต์ ไม่รวมรถติด)">
+                      <Car size={13} />
+                      {driveBusy ? 'กำลังคำนวณเส้นทางขับ…' : drive ? 'คำนวณเส้นทางขับใหม่' : 'ดูเส้นทางขับจริง ไป 5 จุดใกล้สุด'}
                     </button>
                   )}
                 </div>
@@ -647,6 +731,17 @@ export default function MapsPage() {
           {/* Bottom-center items stack on their own, so they never sit on top of each other. */}
           <div className="map-stack">
             {note && <div className="map-note" role="status">{note.text}</div>}
+            {drive?.route && (
+              <div className="route-chip" role="status">
+                <Car size={14} />
+                <span className="route-text">
+                  ขับไป <b>{drive.route.name}</b> · {drive.route.km.toFixed(1)} กม. · {formatMin(drive.route.min)}
+                </span>
+                <span className="route-note" title="คำนวณสำหรับรถยนต์บนถนน OpenStreetMap ไม่รวมรถติด รถบรรทุกจะช้ากว่า">โดยประมาณ</span>
+                <a className="route-credit" href={OSRM_CREDIT.url} target="_blank" rel="noopener noreferrer">{OSRM_CREDIT.name}</a>
+                <button type="button" className="x" onClick={() => setDrive((d) => (d ? { ...d, route: null } : d))} aria-label="ซ่อนเส้นทาง"><X size={14} /></button>
+              </div>
+            )}
             {rainOn && rainData && (
               <div className="rain-bar" role="group" aria-label="ชั้นฝน">
                 <div className="rain-row">
