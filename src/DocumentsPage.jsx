@@ -545,8 +545,16 @@ function FileCard({ file, result, onSheet, onChange, onRemove }) {
           ) : (
             <p className="muted">
               หัวตารางแถวที่ {result.headerRow} · {result.trips.length} เที่ยว · {dropCount} จุดส่ง
-              {result.skipped > 0 && ` · ข้าม ${result.skipped} แถวที่ไม่ใช่งานส่ง`}
+              {result.skipped > 0 && ` · ข้าม ${result.skipped} แถวประกอบ เช่น “เติมเก็บ”`}
               {missing.length > 0 && ` · ไม่มีในไฟล์ (เว้นว่าง): ${missing.join(', ')}`}
+            </p>
+          )}
+          {result?.warnings?.length > 0 && (
+            <p className="conv-err">
+              <AlertTriangle size={14} /> อ่านเวลาถึงลูกค้าไม่ได้ {result.warnings.length} แถว:
+              {' '}{result.warnings.slice(0, 4).map((w) => `แถว ${w.row} “${w.customer}”`).join(' · ')}
+              {result.warnings.length > 4 && ` · และอีก ${result.warnings.length - 4} แถว`}
+              {' '}· กรุณาตรวจช่องวัน/เวลาถึงลูกค้าก่อนส่งออก
             </p>
           )}
         </>

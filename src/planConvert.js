@@ -99,6 +99,9 @@ export function parseWhen(v) {
   if (v == null) return null
   if (typeof v === 'number') {
     if (v < 0) return null
+    // Some source plans store a time as an integer hour (for example 9 with a 0.00 format),
+    // rather than Excel's fractional-day time. In a time column, small whole numbers are hours.
+    if (Number.isInteger(v) && v <= 23) return { time: { h: v, mi: 0 } }
     if (v < 1) return { time: serialTime(v) }
     const date = serialDate(v)
     return v % 1 ? { date, time: serialTime(v) } : { date }
@@ -269,7 +272,9 @@ export function convertSheet(rows, opts) {
     const qtyCell = get(row, 'qty')
     const qty = num(qtyCell)
     const arrive = parseWhen(get(row, 'arrive'))
-    const isDrop = customer && qty !== 0 && (qty > 0 || arrive?.time || get(row, 'order') != null)
+    // Customer rows are the source of truth: keep them even if time/qty/order formatting
+    // is unfamiliar. Only known instruction rows (currently "เติมเก็บ") are excluded.
+    const isDrop = customer && !/^เติมเก็บ$/i.test(customer.trim())
     if (!isDrop) {
       if (customer || qty) skipped++
       continue
@@ -303,7 +308,7 @@ export function convertSheet(rows, opts) {
       trips.push(trip)
     }
     trip.notes.push(get(row, 'note'))
-    trip.drops.push({ customer, arrive, distance: num(get(row, 'distance')) })
+    trip.drops.push({ customer, arrive, distance: num(get(row, 'distance')), sourceRow: r + 1 })
   }
 
   for (const t of trips) {
@@ -312,7 +317,10 @@ export function convertSheet(rows, opts) {
     resolveTimes(t, t.date || opts.date)
   }
   const found = Object.keys(FIELD_LABEL).filter(has)
-  return { trips, headerRow: head.row + 1, found, skipped }
+  const warnings = trips.flatMap((t) => t.drops
+    .filter((d) => !d.arrive?.time)
+    .map((d) => ({ row: d.sourceRow, customer: d.customer, message: 'ไม่มีเวลาถึงลูกค้าที่อ่านได้' })))
+  return { trips, headerRow: head.row + 1, found, skipped, warnings }
 }
 
 // Turns the read times into full date-times. The plan date is the departure day; an arrival
@@ -344,7 +352,7 @@ export function toRows(trips, prefix = '') {
   trips.forEach((t, i) => {
     t.drops.forEach((d, j) => {
       const first = j === 0
-      out.push({ key: `${prefix}${i}:${j}`, start: first, cells: [
+      out.push({ key: `${prefix}${i}:${j}`, start: first, sourceRow: d.sourceRow, cells: [
         null,
         first ? fmtYmd(t.dateYmd) : null,
         first ? t.carrier : null,
