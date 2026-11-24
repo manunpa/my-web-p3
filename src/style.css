@@ -483,6 +483,42 @@ a{color:var(--muted);text-decoration:none}a:hover{color:var(--gold-text)}
 .gm-style .mpop-btn{background:#f4f4f5;border-color:#d4d4d8;color:#111!important}
 .gm-style .mpop-btn.primary{background:#1a73e8;border-color:#1a73e8;color:#fff!important}
 @media (max-width:900px){.map-tools{bottom:100px}}
+.view-sum{margin:0;padding:0 2px;font-size:11.5px;line-height:1.5;color:var(--muted)}
+.view-sum b{color:var(--text)}
+.dups-title{margin:8px 0 2px;font-size:11px}
+.dup-row{display:flex;flex-direction:column;gap:1px;width:100%;padding:4px 0;border:0;background:none;color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.dup-row:hover .pname{color:var(--gold-text)}
+/* route planner (folded in the side panel) */
+.planner{border:1px solid var(--line);border-radius:12px;background:var(--field)}
+.planner>summary{display:flex;align-items:center;gap:6px;padding:9px 12px;cursor:pointer;font-size:13px;font-weight:600;list-style:none}
+.planner>summary::-webkit-details-marker{display:none}
+.planner[open]>summary{border-bottom:1px solid var(--line)}
+.planner-body{display:grid;gap:8px;padding:10px 12px 12px}
+.planner-hint{margin:0;font-size:12px;line-height:1.5}
+.stops{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.stops li{display:flex;align-items:center;gap:8px;min-width:0;font-size:12.5px}
+.stop-n{flex:none;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#1a73e8;color:#fff;font-size:11px;font-weight:700}
+.stop-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stop-leg{flex:none;font-style:normal;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+.stops .x{flex:none;display:grid;place-items:center;width:22px;height:22px;padding:0;border:0;border-radius:6px;background:none;color:var(--muted);cursor:pointer}
+.stops .x:hover{color:var(--text);background:rgb(var(--glow) / .15)}
+.planner-actions{display:flex;flex-wrap:wrap;gap:6px}
+.planner-actions .more{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;font-size:12px;text-decoration:none;color:var(--text)}
+.planner-actions .more.primary{background:#1a73e8;border-color:#1a73e8;color:#fff}
+.planner-actions .more:disabled{opacity:.5;cursor:not-allowed}
+.planner-sum{margin:0;font-size:12px;line-height:1.5}
+.planner-sum a{color:var(--gold-text)}
+.planner-along{display:grid;gap:6px;border-top:1px solid var(--line);padding-top:8px}
+.planner-radius{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px}
+.planner-radius button{height:24px;padding:0 9px;border-radius:8px;border:1px solid var(--line);background:none;color:var(--text);font:inherit;font-size:11.5px;cursor:pointer}
+.planner-radius button.on{background:#1a73e8;border-color:#1a73e8;color:#fff}
+.planner-count{margin:0;font-size:12px}
+.along{list-style:none;margin:0;padding:0;display:grid;gap:2px;max-height:320px;overflow:auto}
+.along button{display:grid;grid-template-columns:auto 1fr;column-gap:8px;width:100%;padding:6px 8px;border:0;border-radius:8px;background:none;color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.along button:hover{background:rgb(var(--glow) / .1)}
+.along .fuel-dot{grid-row:1 / span 2;align-self:center}
+.along .pname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px}
+.along .pmeta{font-size:11px;color:var(--muted)}
 /* driving route */
 .near-bar .nb-drive-info{flex:none;color:#1a73e8;font-weight:600;font-variant-numeric:tabular-nums}
 .near-bar .nb-drive-btn{color:#1a73e8;font-weight:600}

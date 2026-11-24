@@ -64,6 +64,32 @@ export async function driveRoute(from, to) {
   return { km: r.distance / 1000, min: r.duration / 60, coords: r.geometry.coordinates.map(([lng, lat]) => [lat, lng]) }
 }
 
-export const formatMin = (min) => (min < 60
+/**
+ * Driving time and distance between every pair of `points` (one call).
+ * -> { dur: [[min]], dist: [[km]] }, null where there is no road route.
+ */
+export async function driveMatrix(points) {
+  const j = await call(`/table/v1/driving/${points.map(lonLat).join(';')}?annotations=duration,distance`)
+  const bad = (j.sources ?? []).findIndex((s) => (s?.distance ?? 0) > SNAP_MAX_M)
+  if (bad >= 0) throw new Error(`จุดที่ ${bad + 1} อยู่ไกลจากถนนเกินไป`)
+  const conv = (m, f) => (m ?? []).map((row) => row.map((v) => (v == null ? null : v / f)))
+  return { dur: conv(j.durations, 60), dist: conv(j.distances, 1000) }
+}
+
+/** One route through all `points` in the given order (one call) -> { km, min, coords, legs: [{ km, min }] }. */
+export async function driveRouteVia(points) {
+  const j = await call(`/route/v1/driving/${points.map(lonLat).join(';')}?overview=full&geometries=geojson`)
+  const r = j.routes?.[0]
+  if (!r) throw new Error('ไม่พบเส้นทางถนน')
+  const bad = (j.waypoints ?? []).findIndex((w) => (w?.distance ?? 0) > SNAP_MAX_M)
+  if (bad >= 0) throw new Error(`จุดที่ ${bad + 1} อยู่ไกลจากถนนเกินไป`)
+  return {
+    km: r.distance / 1000, min: r.duration / 60,
+    coords: r.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
+    legs: r.legs.map((l) => ({ km: l.distance / 1000, min: l.duration / 60 })),
+  }
+}
+
+export const formatMin =(min) => (min < 60
   ? `${Math.max(1, Math.round(min))} นาที`
   : `${Math.floor(min / 60)} ชม. ${Math.round(min % 60)} นาที`)

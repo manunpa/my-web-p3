@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Search, RefreshCw, MapPin, Layers, Crosshair, X, Copy, Check, ExternalLink, AlertTriangle,
-  LocateFixed, Navigation, Fuel, Car, Bus, Bike, Eye, CloudRain, Play, Pause, Anchor, Wind,
+  LocateFixed, Navigation, Fuel, Car, Bus, Bike, Eye, CloudRain, Play, Pause, Anchor, Wind, Route,
 } from 'lucide-react'
 import { loadOffshore, cachedOffshore, DMF_CREDIT, PLATFORM_GROUP, PLATFORM_COLOR } from './offshoreData'
 import { loadRainFrames, rainTimeLabel, lagLabel } from './rainRadar'
-import { driveTable, driveRoute, formatMin, OSRM_CREDIT } from './routing'
+import { driveTable, driveRoute, driveMatrix, driveRouteVia, formatMin, OSRM_CREDIT } from './routing'
+import { alongRoute, bestOrder, googleDirections, MAX_STOPS } from './planner'
+import RoutePlanner from './RoutePlanner'
 import StreetViewPanel from './StreetViewPanel'
 import {
   loadGeofences, cachedGeofences, googleMapsLink, navLink, windyLink, parseCoords, OTHER_SUPPLIER_COLOR,
@@ -322,8 +324,17 @@ export default function MapsPage() {
   const shownSt = useMemo(() => (showSt ? st.points.filter((p) => !hiddenBrands.has(p.supplier) && matches(p)) : []),
     [showSt, st.points, hiddenBrands, matches])
   const shownPlat = useMemo(() => (showOff && showPlat ? off.platforms.filter(matches) : []), [showOff, showPlat, off.platforms, matches])
-  const shown = useMemo(() => (shownSt.length || shownPlat.length ? [...shownGeo, ...shownSt, ...shownPlat] : shownGeo),
-    [shownGeo, shownSt, shownPlat])
+  // Route planner: stops (the first is the start), the planned route and the fuel stations near it.
+  const [plan, setPlan] = useState({ stops: [], route: null, along: null })
+  const [planOpen, setPlanOpen] = useState(false)
+  const [planBusy, setPlanBusy] = useState(false)
+  const [alongLoading, setAlongLoading] = useState(false)
+  // Fuel stations near the planned route are drawn even when the fuel layer is off (only those, a few dozen).
+  const shownAlong = useMemo(() => (!showSt && plan.along ? plan.along.items.map((i) => i.p) : []), [showSt, plan.along])
+  const shown = useMemo(
+    () => (shownSt.length || shownPlat.length || shownAlong.length ? [...shownGeo, ...shownSt, ...shownPlat, ...shownAlong] : shownGeo),
+    [shownGeo, shownSt, shownPlat, shownAlong],
+  )
   // Concession areas are drawn whole (they are not searched or filtered).
   const areas = showOff && showAreas ? off.areas : null
 
@@ -347,6 +358,29 @@ export default function MapsPage() {
       : shown
     return origin ? [...inside].sort((a, b) => distKm(origin, a) - distKm(origin, b)) : inside
   }, [shown, inView, bounds, origin])
+
+  // A short count of what is inside the map window (shown only with "only points in the map area").
+  const viewSum = useMemo(() => {
+    if (!inView || !bounds) return null
+    const c = new Map()
+    for (const p of listed) c.set(p.supplier, (c.get(p.supplier) || 0) + 1)
+    return { total: listed.length, parts: [...c].sort((a, b) => b[1] - a[1]).slice(0, 6) }
+  }, [inView, bounds, listed])
+
+  // Data to check in the Google Sheet: rows of one supplier at the same coordinates (a real duplicate;
+  // the same site listed under different suppliers is normal), and the same name used at places more
+  // than 100 m apart.
+  const dups = useMemo(() => {
+    const byXY = new Map(), byName = new Map()
+    const push = (m, k, p) => { const g = m.get(k); if (g) g.push(p); else m.set(k, [p]) }
+    for (const p of data.points) {
+      push(byXY, `${p.supplier}|${p.lat.toFixed(5)},${p.lng.toFixed(5)}`, p)
+      push(byName, p.name.toLowerCase().replace(/\s+/g, ' ').trim(), p)
+    }
+    const sameXY = [...byXY.values()].filter((g) => g.length > 1)
+    const sameName = [...byName.values()].filter((g) => g.length > 1 && g.some((p) => distKm(g[0], p) > 0.1))
+    return { sameXY, sameName }
+  }, [data.points])
 
   useEffect(() => setLimit(PAGE), [q, hidden, hiddenBrands, showSt, showOff, showPlat, inView, pin, !me]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -428,10 +462,82 @@ export default function MapsPage() {
     }
   }
 
+  /* ---- route planner ---- */
+  const stopOf = (p) => ({ id: p.id, name: p.name, lat: p.lat, lng: p.lng })
+  // Changing the stops makes the planned route and the fuel list out of date, so they are dropped.
+  const setStops = (fn) => setPlan((pl) => ({ stops: fn(pl.stops), route: null, along: null }))
+  const addStop = (s) => {
+    if (plan.stops.length >= MAX_STOPS) { say(`เพิ่มได้สูงสุด ${MAX_STOPS} จุด`, 3500); return }
+    if (plan.stops.some((x) => x.id === s.id)) { say('จุดนี้อยู่ในแผนแล้ว', 2500); return }
+    setStops((st0) => [...st0, s])
+    setPlanOpen(true)
+    say(`เพิ่ม "${s.name}" ในแผนเส้นทางแล้ว`, 2500)
+  }
+  const addMeStop = () => {
+    if (!me || plan.stops.some((x) => x.id === 'me')) return
+    setStops((st0) => [{ id: 'me', name: 'ตำแหน่งของฉัน', lat: me.lat, lng: me.lng }, ...st0].slice(0, MAX_STOPS))
+    setPlanOpen(true)
+  }
+  const removeStop = (i) => setStops((st0) => st0.filter((_, k) => k !== i))
+  const clearPlan = () => setPlan({ stops: [], route: null, along: null })
+
+  // Put the stops after the first one in the order with the least driving time (one OSRM call).
+  const optimizePlan = async () => {
+    if (plan.stops.length < 3 || planBusy) return
+    setPlanBusy(true)
+    try {
+      const { dur } = await driveMatrix(plan.stops)
+      const order = bestOrder(dur)
+      if (!order) { say('ไม่พบลำดับที่ขับถึงครบทุกจุดได้ (บางจุดไม่มีถนนเชื่อมถึงกัน)', 6000); return }
+      setStops((st0) => order.map((i) => st0[i]))
+      const total = order.slice(1).reduce((s, j, k) => s + dur[order[k]][j], 0)
+      say(`เรียงลำดับใหม่แล้ว: ขับรวมประมาณ ${formatMin(total)}`, 5000)
+    } catch (e) {
+      say(`เรียงลำดับไม่สำเร็จ: ${e.message}`, 6000)
+    } finally {
+      setPlanBusy(false)
+    }
+  }
+
+  const buildPlan = async () => {
+    if (plan.stops.length < 2 || planBusy) return
+    setPlanBusy(true)
+    try {
+      const rt = await driveRouteVia(plan.stops)
+      setPlan((pl) => ({ ...pl, route: rt, along: null }))
+      setDrive((d) => (d ? { ...d, route: null } : d)) // one route on the map at a time
+    } catch (e) {
+      say(`คำนวณเส้นทางไม่สำเร็จ: ${e.message}`, 7000)
+    } finally {
+      setPlanBusy(false)
+    }
+  }
+
+  // Fuel stations within radiusKm of the planned route (loads the station list the first time).
+  const planFuel = async (radiusKm = plan.along?.radiusKm ?? (plan.route?.km > 200 ? 2 : 5)) => {
+    if (!plan.route) return
+    setAlongLoading(true)
+    try {
+      const all = st.status === 'ready' ? st : { status: 'ready', ...(cachedStations() ?? await loadStations()) }
+      if (st.status !== 'ready') setSt(all)
+      const { items, total } = alongRoute(plan.route.coords, all.points.filter((p) => !hiddenBrands.has(p.supplier)), radiusKm)
+      setPlan((pl) => ({ ...pl, along: { items, radiusKm, scale: total ? plan.route.km / total : 1 } }))
+    } catch (e) {
+      say(`หาปั๊มตามเส้นทางไม่สำเร็จ: ${e.message}`, 6000)
+    } finally {
+      setAlongLoading(false)
+    }
+  }
+
+  // Click a fuel station in the planner list: show it (and stop pulling the map back to me).
+  const pickAlong = (p) => { setLocked(false); setSelected(p) }
+
+  const shownRoute = plan.route ?? drive?.route ?? null
+
   const mapProps = {
     points: shown, colorOf, selected, onSelect: setSelected, type, view: view.current, onView, fitKey, pin,
     me, nearest, following, locked: following && locked, onUnlock: () => setLocked(false), focus, rain, areas,
-    route: drive?.route ?? null,
+    route: shownRoute,
   }
 
   return (
@@ -556,10 +662,23 @@ export default function MapsPage() {
             )}
           </div>
 
+          <RoutePlanner
+            stops={plan.stops} open={planOpen} onToggle={setPlanOpen} busy={planBusy} hasMe={!!me} onAddMe={addMeStop}
+            onRemove={removeStop} onClear={clearPlan} onOptimize={optimizePlan} onBuild={buildPlan} onFuel={planFuel}
+            route={plan.route} along={plan.along} radiusKm={plan.along?.radiusKm ?? (plan.route?.km > 200 ? 2 : 5)} googleLink={googleDirections(plan.stops)}
+            onPick={pickAlong} colorOf={colorOf} fuelLoading={alongLoading}
+          />
+
           <label className="inview">
             <input type="checkbox" checked={inView} onChange={(e) => setInView(e.target.checked)} />
             <Crosshair size={14} /> เฉพาะจุดในขอบเขตแผนที่ (เรียงจากใกล้กึ่งกลาง)
           </label>
+          {viewSum && (
+            <p className="view-sum">
+              ในจอนี้ <b>{nf.format(viewSum.total)}</b> จุด
+              {viewSum.parts.map(([name, n]) => <span key={name}> · {name} {nf.format(n)}</span>)}
+            </p>
+          )}
 
           {pin && !selected && (
             <div className="picked">
@@ -578,6 +697,9 @@ export default function MapsPage() {
                     <Car size={14} /> {driveBusy ? 'กำลังคำนวณ…' : 'ขับจริงไป 5 จุดใกล้สุด'}
                   </button>
                 )}
+                <button type="button" className="more" onClick={() => addStop({ id: `pin:${pin.lat},${pin.lng}`, name: `พิกัด ${pin.lat.toFixed(4)}, ${pin.lng.toFixed(4)}`, lat: pin.lat, lng: pin.lng })}>
+                  <Route size={14} /> เพิ่มในแผน
+                </button>
               </div>
             </div>
           )}
@@ -601,6 +723,12 @@ export default function MapsPage() {
                   <a className="more" href={windyLink(selected)} target="_blank" rel="noopener noreferrer">
                     <Wind size={14} /> ลม/คลื่น (Windy)
                   </a>
+                )}
+                {selected.kind !== 'platform' && (
+                  <button type="button" className="more" onClick={() => addStop(stopOf(selected))}
+                    title="เพิ่มจุดนี้ในแผนเส้นทาง (วางแผนเส้นทางหลายจุด ดูปั๊มตามทาง)">
+                    <Route size={14} /> เพิ่มในแผน
+                  </button>
                 )}
                 {selected.kind !== 'platform' && ( // no roads or street imagery out at sea
                   <>
@@ -649,6 +777,28 @@ export default function MapsPage() {
             </button>
           )}
           {data.status === 'ready' && listed.length === 0 && <p className="empty">ไม่พบสถานีที่ตรงกับเงื่อนไข</p>}
+
+          {(dups.sameXY.length > 0 || dups.sameName.length > 0) && (
+            <details className="invalid dups">
+              <summary><AlertTriangle size={14} /> ข้อมูลที่ควรตรวจ: แถวซ้ำ {nf.format(dups.sameXY.length)} กลุ่ม · ชื่อซ้ำแต่อยู่คนละที่ {nf.format(dups.sameName.length)} กลุ่ม</summary>
+              {[['ผู้ให้บริการเดียวกัน พิกัดเดียวกัน หลายแถว', dups.sameXY], ['ชื่อเดียวกันแต่ห่างกันเกิน 100 ม.', dups.sameName]].map(([title, groups]) => groups.length > 0 && (
+                <div key={title}>
+                  <p className="muted dups-title">{title}</p>
+                  <ul>
+                    {groups.slice(0, 40).map((g) => (
+                      <li key={g[0].id}>
+                        <button type="button" className="dup-row" onClick={() => setSelected(g[0])}>
+                          <span className="pname">{g[0].name}{g.length > 1 ? ` (${g.length} แถว)` : ''}</span>
+                          <span className="pmeta">{g.map((p) => p.supplier).filter((s, i, a) => a.indexOf(s) === i).join(', ')} · {g[0].lat.toFixed(5)}, {g[0].lng.toFixed(5)}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {groups.length > 40 && <p className="muted dups-title">แสดง 40 จาก {nf.format(groups.length)} กลุ่ม</p>}
+                </div>
+              ))}
+            </details>
+          )}
 
           {data.invalid.length > 0 && (
             <details className="invalid">
@@ -731,15 +881,20 @@ export default function MapsPage() {
           {/* Bottom-center items stack on their own, so they never sit on top of each other. */}
           <div className="map-stack">
             {note && <div className="map-note" role="status">{note.text}</div>}
-            {drive?.route && (
+            {shownRoute && (
               <div className="route-chip" role="status">
                 <Car size={14} />
                 <span className="route-text">
-                  ขับไป <b>{drive.route.name}</b> · {drive.route.km.toFixed(1)} กม. · {formatMin(drive.route.min)}
+                  {plan.route
+                    ? <>แผนเส้นทาง {plan.stops.length} จุด · {plan.route.km.toFixed(1)} กม. · {formatMin(plan.route.min)}</>
+                    : <>ขับไป <b>{drive.route.name}</b> · {drive.route.km.toFixed(1)} กม. · {formatMin(drive.route.min)}</>}
                 </span>
                 <span className="route-note" title="คำนวณสำหรับรถยนต์บนถนน OpenStreetMap ไม่รวมรถติด รถบรรทุกจะช้ากว่า">โดยประมาณ</span>
                 <a className="route-credit" href={OSRM_CREDIT.url} target="_blank" rel="noopener noreferrer">{OSRM_CREDIT.name}</a>
-                <button type="button" className="x" onClick={() => setDrive((d) => (d ? { ...d, route: null } : d))} aria-label="ซ่อนเส้นทาง"><X size={14} /></button>
+                <button type="button" className="x" aria-label="ซ่อนเส้นทาง"
+                  onClick={() => (plan.route ? setPlan((pl) => ({ ...pl, route: null, along: null })) : setDrive((d) => (d ? { ...d, route: null } : d)))}>
+                  <X size={14} />
+                </button>
               </div>
             )}
             {rainOn && rainData && (
