@@ -203,8 +203,11 @@ export default function DocumentsPage() {
         <header className="dash-head">
           <a href="#/" className="back"><ArrowLeft size={16} /> เมนู</a>
           <div className="dash-title">
-            <h1>แปลง<b>แผนงาน</b></h1>
-            <p className="sub">ใส่แผนงานรูปแบบไหนก็ได้ ระบบจะจัดให้เป็นรูปแบบตามไฟล์ตัวอย่าง · ไฟล์ไม่ถูกส่งออกจากเครื่อง</p>
+            <h1>Plan <b>Converter</b></h1>
+            <p className="sub">
+              ใส่แผนงานรูปแบบไหนก็ได้ ระบบจะจัดให้เป็นรูปแบบตามไฟล์ตัวอย่าง · ไฟล์ที่อัปโหลดไม่ถูกส่งออกจากเครื่อง
+              {PLAN_ARCHIVE_URL && ' · แผนงานที่ส่งออกเป็น Excel จะเก็บสำเนาไว้ใน Google Sheet ด้วย'}
+            </p>
           </div>
         </header>
 
@@ -261,7 +264,7 @@ export default function DocumentsPage() {
                 <button type="button" className="conv-dl" onClick={download} disabled={!drops || saving}
                   title={PLAN_ARCHIVE_URL ? 'ดาวน์โหลดไฟล์ Excel และบันทึกแผนงานชุดนี้ลง Google Sheet' : 'ดาวน์โหลดไฟล์ Excel'}>
                   {saving ? <Loader2 size={15} className="spin" /> : <Download size={15} />}
-                  {PLAN_ARCHIVE_URL ? ' ดาวน์โหลด Excel + บันทึกลงชีท' : ' ดาวน์โหลด Excel'}
+                  {' ส่งออกเป็น Excel'}
                 </button>
               </div>
               {archive.status !== 'idle' && (

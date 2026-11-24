@@ -142,7 +142,7 @@ export default function ReportsPage() {
         <header className="dash-head">
           <a href="#/" className="back"><ArrowLeft size={16} /> เมนู</a>
           <div className="dash-title">
-            <h1>รายงาน<b>สำเร็จรูป</b></h1>
+            <h1>Report <b>Center</b></h1>
             <p className="sub">ตารางจากกล่องวิเคราะห์ในแดชบอร์ด · เลือกรายงานและช่วงวันที่ แล้วดูหรือส่งออก</p>
           </div>
           {source && (
