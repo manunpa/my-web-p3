@@ -4,7 +4,7 @@ import {
   GOOGLE_MAPS_KEY, pointPopupHtml, pinPopupHtml, myPopupHtml, PIN_SVG, nearStyle, labelT, formatDist, stationSvg, platformSvg, areaPopupHtml,
 } from './mapsData'
 import { areaColor, PLATFORM_COLOR } from './offshoreData'
-import { GOOGLE_MAPS_DAILY_LIMIT, takeGoogleMapLoad, consumeGoogleMapLoad } from './mapsQuota'
+import { GOOGLE_MAPS_MONTHLY_LIMIT, takeGoogleMapLoad, consumeGoogleMapLoad } from './mapsQuota'
 import { createGlide, ACC_CIRCLE_MAX_M } from './myLocation'
 import { radarTileElement } from './rainRadar'
 
@@ -267,9 +267,8 @@ export default function GoogleMap({
         if (live.current.locked && live.current.active) m.setCenter(pos)
       })
       setReady(true)
-    }).catch((e) => alive && setError(e.code === 'permission-denied' || e.code === 'unavailable'
-      ? 'ตรวจสอบโควต้า Google Maps ไม่สำเร็จ จึงยังไม่โหลดแผนที่ (เพื่อไม่ให้เกิดค่าใช้จ่าย) ลองใหม่ภายหลัง หรือใช้ OpenStreetMap'
-      : e.message))
+    }).catch((e) => alive && setError(
+      `ตรวจสอบโควต้า Google Maps ไม่สำเร็จ (${e.message}) จึงยังไม่โหลดแผนที่ (เพื่อไม่ให้เกิดค่าใช้จ่าย) ลองใหม่ภายหลัง หรือใช้ OpenStreetMap`))
     return () => {
       alive = false
       authListeners.delete(onAuth)
@@ -583,8 +582,8 @@ export default function GoogleMap({
         <div className="map-msg err">
           {error === 'quota' ? (
             <>
-              <strong>วันนี้ใช้ Google Maps ครบ {GOOGLE_MAPS_DAILY_LIMIT} ครั้งแล้ว</strong>
-              <span>จำกัดไว้เพื่อไม่ให้เกินโควต้าฟรีของ Google ใช้ OpenStreetMap ไปก่อน แล้วเปิดใหม่ได้พรุ่งนี้ (นับใหม่ตอนเที่ยงคืน)</span>
+              <strong>เดือนนี้ใช้ Google Maps ครบ {GOOGLE_MAPS_MONTHLY_LIMIT.toLocaleString('th-TH')} ครั้งแล้ว (2 เว็บรวมกัน)</strong>
+              <span>จำกัดไว้เพื่อไม่ให้เกินโควต้าฟรีของ Google ใช้ OpenStreetMap ไปก่อน นับใหม่ต้นเดือนหน้า</span>
             </>
           ) : error === 'auth' ? (
             <>

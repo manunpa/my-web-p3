@@ -20,7 +20,7 @@ import {
 } from './mapsData'
 import { loadAdmin, adminReady, areaOf, formatArea, areaSearchText } from './geoAdmin'
 import { useMyLocation, ACC_CIRCLE_MAX_M } from './myLocation'
-import { GOOGLE_MAPS_DAILY_LIMIT } from './mapsQuota'
+import { GOOGLE_MAPS_MONTHLY_LIMIT } from './mapsQuota'
 import LeafletMap from './LeafletMap'
 import GoogleMap, { preloadGoogleMaps } from './GoogleMap'
 
@@ -305,11 +305,11 @@ export default function MapsPage() {
     setFitKey(0) // keep the current view when switching
   }
 
-  // Google Maps failed (daily limit reached, key refused, script not loaded, quota check failed):
+  // Google Maps failed (monthly limit reached, key refused, script not loaded, quota check failed):
   // go back to OpenStreetMap right away and keep the Google button off until the page is reloaded.
   const [googleDown, setGoogleDown] = useState(null)
   const onGoogleFail = useCallback((reason) => {
-    const why = reason === 'quota' ? `วันนี้ใช้ Google Maps ครบ ${GOOGLE_MAPS_DAILY_LIMIT} ครั้งแล้ว (นับใหม่ตอนเที่ยงคืน)`
+    const why = reason === 'quota' ? `เดือนนี้ใช้ Google Maps ครบ ${GOOGLE_MAPS_MONTHLY_LIMIT.toLocaleString('th-TH')} ครั้งแล้ว (2 เว็บรวมกัน นับใหม่ต้นเดือนหน้า)`
       : reason === 'auth' ? 'Google Maps ใช้ไม่ได้ (key ถูกปฏิเสธ)'
         : 'โหลด Google Maps ไม่สำเร็จ'
     setGoogleDown(why)

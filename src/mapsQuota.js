@@ -1,28 +1,25 @@
-import { doc, runTransaction } from 'firebase/firestore'
-import { db } from './firebase'
-
-// Google gives 10,000 free map loads a month. 300 a day x 31 days = 9,300, so we never go over.
-// If you change this number, change it in firestore.rules too (match /mapsQuota/{day}).
-export const GOOGLE_MAPS_DAILY_LIMIT = 300
-
-// Today's date in Thailand as "YYYYMMDD" (the Firestore rules check the same thing).
-const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' })
-  .format(new Date()).replaceAll('-', '')
+import { fetchProtectedJson } from './protectedFetch'
 
 /*
- * Count one Google map load for the whole website (all users share the same counter).
- * Resolves { ok: true, used } when the map may be created, or { ok: false, used } when
- * today's limit is already reached. Rejects if Firestore can't be reached.
+ * One monthly counter of Google map loads and Street View panoramas, shared with the my-website-pm
+ * site (both use the same Google key). It lives in an Apps Script (my-website-pm repo:
+ * apps-script/maps-quota.gs), which checks the Firebase login of either site.
+ * Google gives 10,000 free map loads and 5,000 Street View panoramas a month; the script stops at
+ * the limits below. If you change them, change LIMITS in maps-quota.gs too.
  */
-async function claim() {
-  const ref = doc(db, 'mapsQuota', today())
-  return runTransaction(db, async (tx) => {
-    const snap = await tx.get(ref)
-    const used = snap.exists() ? snap.data().count : 0
-    if (used >= GOOGLE_MAPS_DAILY_LIMIT) return { ok: false, used }
-    tx.set(ref, { count: used + 1 })
-    return { ok: true, used: used + 1 }
-  })
+export const QUOTA_API_URL = 'https://script.google.com/macros/s/AKfycbymzE6rCfY5nP4uX4K96NH5sQ_nBKwpQ8tUscw3ubO3voQal5CGp38_bH1SltZl2elCnA/exec'
+export const GOOGLE_MAPS_MONTHLY_LIMIT = 9000
+export const STREET_VIEW_MONTHLY_LIMIT = 4500
+
+/**
+ * Count one use. kind: 'map' | 'sv'.
+ * Resolves { ok, used, limit }: ok false = this month's limit is reached. Rejects when the counter
+ * can't be reached (the caller then does not load Google).
+ */
+export async function claimQuota(kind) {
+  const j = await fetchProtectedJson(QUOTA_API_URL, { kind })
+  if (j?.status !== 'ok') throw new Error(j?.message || 'ตัวนับโควตาตอบกลับผิดรูปแบบ')
+  return { ok: !!j.ok, used: j.used, limit: j.limit }
 }
 
 // A load that was counted but not used yet (the page closed before the map was created).
@@ -30,7 +27,7 @@ async function claim() {
 let spare = null
 
 export function takeGoogleMapLoad() {
-  spare ??= claim().catch((e) => { spare = null; throw e })
+  spare ??= claimQuota('map').catch((e) => { spare = null; throw e })
   return spare
 }
 

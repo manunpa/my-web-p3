@@ -94,7 +94,7 @@ export default function StreetViewPanel({ at, onClose }) {
         )}
       </div>
       {state.status === 'ready' && (
-        <div className="sv-foot">เดือนนี้เปิดไปแล้ว {nf.format(state.used)} / {nf.format(STREET_VIEW_MONTHLY_LIMIT)} ครั้ง (ทุกคนรวมกัน)</div>
+        <div className="sv-foot">เดือนนี้เปิดไปแล้ว {nf.format(state.used)} / {nf.format(STREET_VIEW_MONTHLY_LIMIT)} ครั้ง (ทุกคน 2 เว็บรวมกัน)</div>
       )}
     </div>
   )
