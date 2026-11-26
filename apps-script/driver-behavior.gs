@@ -2,6 +2,7 @@
  * บันทึกพฤติกรรม พขร. -> JSON API for the driver behavior dashboard (#/dashboard/behavior).
  * ส่งข้อมูลให้เฉพาะคนที่ล็อกอินเว็บ my-web-p3 แล้วเท่านั้น (เว็บส่ง Firebase ID token มาแบบ POST)
  * เปิดลิงก์ตรงๆ (GET) จะได้ {"error":"unauthorized"}
+ * เว็บแผนงาน (my-website-pm หน้า BBS) ได้เฉพาะ ชื่อ พขร. วันที่ พฤติกรรม ชนิดความผิด ความเสี่ยง ย้อนหลัง 6 เดือน
  *
  * หลังวางโค้ดครั้งแรก: เลือกฟังก์ชัน authorize → เรียกใช้ → ตรวจสอบสิทธิ์ → อนุญาต
  * แล้วเลือก testData → เรียกใช้ ต้องเห็นจำนวนแถวในบันทึกการดำเนินการ
@@ -36,18 +37,23 @@ const LINK_COLUMNS = ['ใบVR', 'ใบ VR', 'รูประหว่าง�
 // Firebase โปรเจกต์ที่ยอมรับ: projectId -> Web API key (ค่าจาก src/firebase.js ไม่ใช่ความลับ)
 // แยกเป็น 2 ท่อนเพื่อไม่ให้ถูกซ่อนเป็น ••• ตอนคัดลอก
 const FIREBASE_PROJECTS = {
-  'my-web-p3': ['AIzaSyA5OM2o', 'm_4CnwTuFAixQGwxhtyUUmDjv7Y'].join('')
+  'my-web-p3': ['AIzaSyA5OM2o', 'm_4CnwTuFAixQGwxhtyUUmDjv7Y'].join(''),
+  'my-login-project-26857': ['AIzaSyD7HPOh', 'loICyxEyDTfR8yRiH2rT--q4fVo'].join('') // my-website-pm
 }
+const FULL_ACCESS = 'my-web-p3' // โปรเจกต์อื่นได้เฉพาะประวัติแบบย่อ
+const HISTORY_DAYS = 183
 
 // เว็บเรียกผ่าน POST พร้อม token เท่านั้น
 function doPost(e) {
   let body = {}
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}') } catch (err) {}
-  if (!verifyFirebaseToken_(body.idToken)) {
+  const user = verifyFirebaseToken_(body.idToken)
+  if (!user) {
     // reason บอกว่าติดตรงไหน (ไม่มีข้อมูลลับ) เช่น lookup:API key not valid = คีย์ในสคริปต์ผิด
     return json({ status: 'error', error: 'unauthorized', reason: FAIL_REASON_, message: 'เซสชันหมดอายุหรือไม่มีสิทธิ์ กรุณาล็อกอินใหม่' })
   }
   try {
+    if (user.project !== FULL_ACCESS) return json(readHistory_()) // ไม่รับชื่อแท็บจากเว็บอื่น
     return json(readSheet(body.sheet || SHEET_NAME))
   } catch (err) {
     return json({ error: String(err && err.message || err) })
@@ -123,6 +129,44 @@ function decodeJwtPayload_(jwt) {
   } catch (err) {
     return null
   }
+}
+
+// ประวัติแบบย่อ: { history: [[พขร, yyyy-MM-dd, ประเภทพฤติกรรม, ชนิดความผิด, ระดับความเสี่ยง]] }
+function readHistory_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet()
+  const sheet = SHEET_NAME ? ss.getSheetByName(SHEET_NAME) : ss.getSheets()[0]
+  if (!sheet) throw new Error('ไม่พบชีตข้อมูล')
+  const values = sheet.getDataRange().getValues()
+  const tz = ss.getSpreadsheetTimeZone()
+  const plain = (s) => String(s).replace(/[\s\/.\-_]/g, '').toLowerCase()
+  const headers = (values[0] || []).map(plain)
+  const column = (names) => names.map((n) => headers.indexOf(plain(n))).filter((i) => i >= 0)[0]
+  const driver = column(['พขร', 'พนักงานขับรถ', 'ชื่อพขร', 'ชื่อคนขับ'])
+  const date = column(['วันที่', 'วันที่เกิดเหตุ', 'วันเวลา', 'ช่วงเวลา'])
+  const rest = [column(['ประเภทพฤติกรรม']), column(['ชนิดความผิด', 'ชนิดควาผิด']), column(['ระดับความเสี่ยง'])]
+  if (driver === undefined || date === undefined) throw new Error('ไม่พบคอลัมน์ พขร. หรือ วันที่')
+  const since = Date.now() - HISTORY_DAYS * 86400000
+  const history = []
+  for (let r = 1; r < values.length; r++) {
+    const name = String(values[r][driver]).trim()
+    const day = isoDay_(cell(values[r][date], tz))
+    if (!name || !day || new Date(day).getTime() < since) continue
+    history.push([name, day].concat(rest.map((c) => (c === undefined ? '' : cell(values[r][c], tz)))))
+  }
+  return { history: history }
+}
+
+// "2026-11-01 ..." หรือ "01/11/2026 ..." (รับปี พ.ศ.) -> "2026-11-01"
+function isoDay_(text) {
+  let m = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
+  let parts = m && [m[1], m[2], m[3]]
+  if (!parts) {
+    m = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+    parts = m && [m[3], m[2], m[1]]
+  }
+  if (!parts) return ''
+  const year = Number(parts[0]) > 2400 ? Number(parts[0]) - 543 : Number(parts[0])
+  return year + '-' + pad(Number(parts[1])) + '-' + pad(Number(parts[2]))
 }
 
 function readSheet(name) {
